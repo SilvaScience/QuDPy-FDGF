@@ -72,6 +72,7 @@ class SparseSectorBackend(BackendBase):
         self.max_cache_entries = int(max_cache_entries)
         self._time_cache = OrderedDict()
         self._liouville_time_cache = OrderedDict()
+        self._integrated_detector_cache = {}
         self._liouville = None
         self._initial_density_vector = None
 
@@ -86,6 +87,7 @@ class SparseSectorBackend(BackendBase):
     def clear_caches(self):
         self._time_cache.clear()
         self._liouville_time_cache.clear()
+        self._integrated_detector_cache.clear()
 
     def _apply_to_columns(self, vector, action):
         """Matrix and Hilbert action -> column-wise action."""
@@ -289,26 +291,108 @@ class SparseSectorBackend(BackendBase):
             )
         return value
 
+    def _detector_vector(self, detector):
+        """Detector -> vec(M^dagger), so that Tr(M rho) = <<M^dagger|rho>>."""
+        dimension = self.layout.total_dimension
+        matrix = np.empty((dimension, dimension), dtype=np.complex128)
+        basis = np.zeros(dimension, dtype=np.complex128)
+        for index in range(dimension):
+            basis[index] = 1.0
+            matrix[:, index] = self.apply_detection_operator(basis, detector)
+            basis[index] = 0.0
+        return matrix.conj().T.reshape(-1, order="F")
+
+    def _integrated_detector(self, spec):
+        """Window and channel -> integral of the Heisenberg-evolved detector.
+
+        Returns X = int_{t0}^{t1} exp(s A^dagger) vec(M^dagger) ds, so that the
+        integrated count of any state is <<X|rho>>. The integral is exact: it
+        is the last column of exp[(t1 - t0) B] with the augmented generator
+        B = [[A^dagger, vec(M^dagger)], [0, 0]], applied matrix-free. X does
+        not depend on the pathway state and is cached.
+        """
+        start, stop = spec.time_window
+        key = (spec.channel, start, stop)
+        cached = self._integrated_detector_cache.get(key)
+        if cached is not None:
+            return cached
+        vector = self._detector_vector(spec.instantaneous().without_projection())
+        size = vector.size
+        generator = self._liouville            # matvec: A, rmatvec: A^dagger
+
+        def augmented_matvec(value):
+            value = np.asarray(value, dtype=np.complex128).reshape(-1)
+            result = np.zeros(size + 1, dtype=np.complex128)
+            result[:size] = generator.rmatvec(value[:size]) + value[size] * vector
+            return result
+
+        def augmented_rmatvec(value):
+            value = np.asarray(value, dtype=np.complex128).reshape(-1)
+            result = np.empty(size + 1, dtype=np.complex128)
+            result[:size] = generator.matvec(value[:size])
+            result[size] = np.vdot(vector, value[:size])
+            return result
+
+        augmented = LinearOperator(
+            (size + 1, size + 1),
+            dtype=np.complex128,
+            matvec=augmented_matvec,
+            rmatvec=augmented_rmatvec,
+        )
+        seed = np.zeros(size + 1, dtype=np.complex128)
+        seed[size] = 1.0
+        integrated = np.asarray(
+            expm_multiply((stop - start) * augmented, seed, traceA=0.0),
+            dtype=np.complex128,
+        )[:size]
+        if start > 0.0:
+            heisenberg = LinearOperator(
+                (size, size),
+                dtype=np.complex128,
+                matvec=generator.rmatvec,
+                rmatvec=generator.matvec,
+            )
+            integrated = np.asarray(
+                expm_multiply(start * heisenberg, integrated, traceA=0.0),
+                dtype=np.complex128,
+            )
+        self._integrated_detector_cache[key] = integrated
+        return integrated
+
+    def _integrated_jump_trapezoid(self, response, spec):
+        """Legacy quadrature over n_steps samples of the window."""
+        start, stop = spec.time_window
+        times = np.linspace(start, stop, spec.n_steps)
+        detector = spec.instantaneous().without_projection()
+        samples = []
+        for time in times:
+            value = 0.0j
+            for projected, prefactor in self._projection_branches(
+                response, spec
+            ):
+                propagated = self._propagate_liouville(projected, time)
+                value += prefactor * self._detect_density(
+                    propagated, detector
+                )
+            samples.append(value)
+        return np.trapezoid(np.asarray(samples, dtype=np.complex128), times)
+
     def _integrated_jump_values(self, response, observables):
         values = {}
         for spec in observables:
-            start, stop = spec.time_window
-            times = np.linspace(start, stop, spec.n_steps)
-            detector = spec.instantaneous().without_projection()
-            samples = []
-            for time in times:
-                value = 0.0j
+            if spec.integration == "trapezoid":
+                values[spec.name] = self._integrated_jump_trapezoid(
+                    response, spec
+                )
+                continue
+            detector = self._integrated_detector(spec)
+            value = sum(
+                prefactor * np.vdot(detector, projected)
                 for projected, prefactor in self._projection_branches(
                     response, spec
-                ):
-                    propagated = self._propagate_liouville(projected, time)
-                    value += prefactor * self._detect_density(
-                        propagated, detector
-                    )
-                samples.append(value)
-            values[spec.name] = np.trapezoid(
-                np.asarray(samples, dtype=np.complex128), times
+                )
             )
+            values[spec.name] = spec.efficiency * value
         return values
 
     def calc_pathway_observables(

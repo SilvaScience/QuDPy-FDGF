@@ -4,7 +4,7 @@ Each check compares a numerical result with a closed-form value:
 - linear absorption of an open two-level system: FWHM = 2 (Gamma_2 + eta);
 - third-order rephasing peak: |S| = 2 mu^4 / (Gamma_2 + eta)^2 at (-omega_eg, omega_eg);
 - action-detected population: S_pop = -i S_pol (Eq. action_pol_identity);
-- integrated fluorescence: N_rad / P_e = 1 - exp(-gamma_1 T), to the trapezoidal error;
+- integrated fluorescence: N_rad / P_e = 1 - exp(-gamma_1 T), exactly;
 - dense and sparse backends agree for all three observables of Example 1.
 """
 import numpy as np
@@ -95,7 +95,7 @@ def test_action_population_and_fluorescence():
         assert np.max(np.abs(s_pop + 1j * s_pol)) <= 1e-12 * np.max(np.abs(s_pol))
     ratio = result.observables["fluorescence"]["R1"] / result.observables["population"]["R1"]
     exact = 1 - np.exp(-5.0)
-    assert np.max(np.abs(ratio - exact)) / exact < 3e-4          # trapezoidal rule, n_steps = 101
+    assert np.max(np.abs(ratio - exact)) / exact < 1e-12          # exact window integral
 
 
 def test_dense_and_sparse_backends_agree_for_example1():
@@ -105,7 +105,7 @@ def test_dense_and_sparse_backends_agree_for_example1():
         solver = example1_solver(backend)
         results[backend] = solver.generate_spectrum(
             PROTOCOL, axes, pathways=(R1, R2), fixed_coordinates={"t2": 10.0},
-            observables=example1_observables(solver, n_steps=11))   # agreement, not quadrature
+            observables=example1_observables(solver))
     for name in ("polarization", "population", "fluorescence"):
         for pathway in ("R1", "R2"):
             a = results["dense"].observables[name][pathway]

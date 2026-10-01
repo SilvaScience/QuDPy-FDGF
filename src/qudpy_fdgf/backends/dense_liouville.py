@@ -57,6 +57,7 @@ class DenseLiouvilleBackend(BackendBase):
         self.max_cache_entries = int(max_cache_entries)
         self._resolvent_cache = OrderedDict()
         self._time_cache = OrderedDict()
+        self._integrated_detector_cache = {}
         self._H_dense = None
         self._A_dense = None
         self._I_liouville = None
@@ -80,6 +81,7 @@ class DenseLiouvilleBackend(BackendBase):
     def clear_caches(self):
         self._resolvent_cache.clear()
         self._time_cache.clear()
+        self._integrated_detector_cache.clear()
 
     def _bounded_cache_put(self, cache, key, value):
         cache[key] = value
@@ -251,26 +253,68 @@ class DenseLiouvilleBackend(BackendBase):
             )
         )
 
+    def _integrated_detector(self, spec):
+        """Window and channel -> integral of the Heisenberg-evolved detector.
+
+        Returns X = int_{t0}^{t1} exp(s A^dagger) vec(M^dagger) ds, so that the
+        integrated count of any state is <<X|rho>>. The integral is exact: it
+        is the last column of exp[(t1 - t0) B] with the augmented generator
+        B = [[A^dagger, vec(M^dagger)], [0, 0]]. X does not depend on the
+        pathway state and is cached.
+        """
+        start, stop = spec.time_window
+        key = (spec.channel, start, stop)
+        cached = self._integrated_detector_cache.get(key)
+        if cached is not None:
+            return cached
+        matrix = self._observable_matrix(spec.instantaneous().without_projection())
+        vector = matrix.conj().T.reshape(-1, order="F")
+        size = vector.size
+        heisenberg = self._A_dense.conj().T
+        augmented = np.zeros((size + 1, size + 1), dtype=np.complex128)
+        augmented[:size, :size] = heisenberg
+        augmented[:size, size] = vector
+        integrated = expm((stop - start) * augmented)[:size, size]
+        if start > 0.0:
+            integrated = expm(start * heisenberg) @ integrated
+        integrated = np.asarray(integrated, dtype=np.complex128)
+        self._integrated_detector_cache[key] = integrated
+        return integrated
+
+    def _integrated_jump_trapezoid(self, response, spec):
+        """Legacy quadrature over n_steps samples of the window."""
+        start, stop = spec.time_window
+        times = np.linspace(start, stop, spec.n_steps)
+        detector = spec.instantaneous().without_projection()
+        samples = []
+        for time in times:
+            value = 0.0j
+            for projected, prefactor in self._projection_branches(
+                response, spec
+            ):
+                propagated = self._time_propagator(time) @ projected
+                value += prefactor * self._detect_response(
+                    propagated, detector
+                )
+            samples.append(value)
+        return np.trapezoid(np.asarray(samples, dtype=np.complex128), times)
+
     def _integrated_jump_values(self, response, observables):
         values = {}
         for spec in observables:
-            start, stop = spec.time_window
-            times = np.linspace(start, stop, spec.n_steps)
-            detector = spec.instantaneous().without_projection()
-            samples = []
-            for time in times:
-                value = 0.0j
+            if spec.integration == "trapezoid":
+                values[spec.name] = self._integrated_jump_trapezoid(
+                    response, spec
+                )
+                continue
+            detector = self._integrated_detector(spec)
+            value = sum(
+                prefactor * np.vdot(detector, projected)
                 for projected, prefactor in self._projection_branches(
                     response, spec
-                ):
-                    propagated = self._time_propagator(time) @ projected
-                    value += prefactor * self._detect_response(
-                        propagated, detector
-                    )
-                samples.append(value)
-            values[spec.name] = np.trapezoid(
-                np.asarray(samples, dtype=np.complex128), times
+                )
             )
+            values[spec.name] = spec.efficiency * value
         return values
 
     def calc_pathway_observables(

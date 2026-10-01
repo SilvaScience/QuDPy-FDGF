@@ -30,6 +30,9 @@ class ObservableSpec:
     time_window: tuple[float, float] | None = None
     n_steps: int = 101
     fourth_interaction: object = None
+    # "exact": integrated detector computed once in the Heisenberg picture;
+    # "trapezoid": legacy quadrature over n_steps samples of the window.
+    integration: str = "exact"
 
     def __post_init__(self):
         name = str(self.name).strip()
@@ -86,6 +89,10 @@ class ObservableSpec:
             object.__setattr__(self, "n_steps", n_steps)
         else:
             window = None
+        integration = str(self.integration).lower()
+        if integration not in {"exact", "trapezoid"}:
+            raise ValueError("integration must be 'exact' or 'trapezoid'.")
+        object.__setattr__(self, "integration", integration)
 
         projections = self.fourth_interaction
         if projections is None:
@@ -143,6 +150,7 @@ class ObservableSpec:
         efficiency=1.0,
         time_window=None,
         n_steps=101,
+        integration="exact",
     ):
         """Projection settings -> action-detected observable."""
         return cls(
@@ -154,6 +162,7 @@ class ObservableSpec:
             time_window=time_window,
             n_steps=n_steps,
             fourth_interaction=fourth_interaction,
+            integration=integration,
         )
 
     @classmethod
@@ -166,8 +175,15 @@ class ObservableSpec:
         efficiency=1.0,
         n_steps=101,
         fourth_interaction=None,
+        integration="exact",
     ):
-        """GKSL channel and time window -> integrated mean jump observable."""
+        """GKSL channel and time window -> integrated mean jump observable.
+
+        By default the window integral is exact: the detector
+        ``gamma L^dagger L`` is propagated once in the Heisenberg picture and
+        integrated over the window, then contracted with each pathway state.
+        ``integration="trapezoid"`` uses ``n_steps`` samples instead.
+        """
         return cls(
             name=name,
             kind="integrated_jump",
@@ -176,6 +192,7 @@ class ObservableSpec:
             efficiency=efficiency,
             n_steps=n_steps,
             fourth_interaction=fourth_interaction,
+            integration=integration,
         )
 
     def instantaneous(self):
