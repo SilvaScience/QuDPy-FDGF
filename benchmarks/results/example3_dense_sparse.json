@@ -1,0 +1,15 @@
+{
+  "D": 10,
+  "pathways": 7,
+  "grid": [
+    31,
+    31
+  ],
+  "eta": 0.008,
+  "time_dense_s": 2.0096924998797476,
+  "time_sparse_s": 15.633296900196001,
+  "relative_difference": {
+    "polarization_h": 2.496085960560549e-14,
+    "polarization_l": 2.5832046613619036e-14
+  }
+}

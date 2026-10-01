@@ -25,6 +25,21 @@ transitions, initial state, and observable.
 - SciPy
 - Matplotlib (optional, for `SpectroscopyPlotter`)
 
+## Examples, tests, and benchmarks
+
+- `examples/quickstart.py`: open two-level system, linear and third-order
+  rephasing responses, with analytical checks (about 2 s). It is the Quick
+  start of the API documentation.
+- `examples/example1_usage.py`: complete input of Example 1 of the manuscript
+  (Listing 1), with three observables from one propagation (about 30 s).
+- `examples/fig_example1_validation.py`: regenerates the validation figure of
+  Example 1.
+- `python -m pytest`: runs `tests/`, including the analytical checks of the
+  manuscript (about 20 s with `OMP_NUM_THREADS=1`).
+- `benchmarks/`: dense versus sparse validation, time and memory versus
+  Hilbert dimension, GMRES iterations versus `eta`, and comparison with time
+  propagation and with the original QuDPy. See `benchmarks/README.md`.
+
 ## Dependency direction
 
 ```text

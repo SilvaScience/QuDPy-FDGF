@@ -1,0 +1,19 @@
+{
+  "grid": [
+    11,
+    11
+  ],
+  "t2": 10.0,
+  "eta": 0.002,
+  "time_dense_s": 0.7501613001804799,
+  "time_sparse_s": 1550.6658018999733,
+  "relative_difference": {
+    "polarization/R1": 1.288220982190594e-15,
+    "polarization/R2": 1.1003575126295361e-15,
+    "population/R1": 1.288220982190594e-15,
+    "population/R2": 1.1003575126295361e-15,
+    "fluorescence/R1": 1.2966896963454135e-15,
+    "fluorescence/R2": 1.1421701884555245e-15
+  },
+  "worst": 1.2966896963454135e-15
+}

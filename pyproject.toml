@@ -33,6 +33,5 @@ version = { attr = "qudpy_fdgf.__version__" }
 where = ["src"]
 
 [tool.pytest.ini_options]
-# testpaths points into local/, which is git-ignored; move the suite back to
-# tests/ at the repository root to make it part of the published package.
-testpaths = ["local/tests"]
+# The distributed suite lives in tests/ (it includes the former local/tests file).
+testpaths = ["tests"]
