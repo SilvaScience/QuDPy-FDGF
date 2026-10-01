@@ -1,0 +1,9 @@
+=== bench_time_fft_ex3 start 10:26:56
+=== bench_time_fft_ex3 end 10:54:59 exit 0
+=== bench_gmres_eta start 10:54:59
+=== bench_gmres_eta end 11:38:58 exit 0
+=== bench_example2_dense_sparse start 11:38:58
+=== bench_example2_dense_sparse end 12:06:43 exit 0
+=== bench_scaling start 12:06:43
+=== bench_scaling end 12:28:12 exit 0
+=== ALL DONE
