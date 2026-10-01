@@ -31,11 +31,11 @@ transitions, initial state, and observable.
   rephasing responses, with analytical checks (about 2 s). It is the Quick
   start of the API documentation.
 - `examples/example1_usage.py`: complete input of Example 1 of the manuscript
-  (Listing 1), with three observables from one propagation (about 30 s).
+  (Listing 1), with three observables from one propagation (about 1 s).
 - `examples/fig_example1_validation.py`: regenerates the validation figure of
   Example 1.
 - `python -m pytest`: runs `tests/`, including the analytical checks of the
-  manuscript (about 20 s with `OMP_NUM_THREADS=1`).
+  manuscript (23 tests, about 10 s with `OMP_NUM_THREADS=1`).
 - `benchmarks/`: dense versus sparse validation, time and memory versus
   Hilbert dimension, GMRES iterations versus `eta`, and comparison with time
   propagation and with the original QuDPy. See `benchmarks/README.md`.
@@ -169,6 +169,25 @@ CollapseChannel(
 
 The rate must not be included a second time in the operator.
 
+The rate is the Lindblad coefficient, not necessarily a measured rate: a
+diagonal channel \(L=\sum_x l_x|x\rangle\langle x|\) damps the coherence
+\(|x\rangle\langle y|\) at \(\gamma(l_x-l_y)^2/2\). A pure-dephasing rate
+\(\gamma_\phi=1/T_2^*\) therefore requires `rate=gamma_phi/2` with
+\(\sigma_z\), but `rate=2*gamma_phi` with a projector or a number operator.
+`solver.decay_rates()` reports the rates implied by the declared channels in
+the eigenbasis of the Hamiltonian:
+
+```python
+rates = solver.decay_rates()                 # modes=True adds exact Liouvillian eigenvalues
+rates.population_decay                       # Gamma_x of each eigenstate
+rates.coherence_decay[x, y]                  # decay rate of |x><y|
+rates.coherences(between=("0", "1"))         # (x, y, omega_xy, gamma_xy) between two sectors
+```
+
+For the open two-level system of `examples/quickstart.py` it returns
+\(\gamma_1\) for the excited-state population and
+\(\Gamma_2=\gamma_1/2+\gamma_\phi\) for the optical coherence.
+
 ## Multiple observables and integrated fluorescence
 
 A pathway propagation can be reused for multiple detection schemes:
@@ -181,7 +200,6 @@ fluorescence = ObservableSpec.mean_jump(
     channel="radiative",
     time_window=(0.0, 200.0),
     efficiency=0.35,
-    n_steps=401,
 )
 
 result = solver.generate_spectrum(
@@ -238,14 +256,29 @@ An `operator` observable computes `Tr[O rho]` at the end of the pathway. A
 `jump_rate` observable computes the instantaneous rate
 
 \[
-I_j(t)=\eta\,\gamma_j\operatorname{Tr}[L_j^\dagger L_j\rho(t)],
+I_j(t)=\varepsilon\,\gamma_j\operatorname{Tr}[L_j^\dagger L_j\rho(t)],
 \]
 
-and `integrated_jump` computes its integrated mean over the requested window.
-The window starts after the pathway's final state, and therefore after the
-protocol's last interaction and propagation. This is a mean jump count; the
-API does not yet generate quantum trajectories or a counting distribution
-`P(N)`.
+where \(\varepsilon\) is the detection efficiency, and `integrated_jump`
+computes its integrated mean over the requested window. The window starts
+after the pathway's final state, and therefore after the protocol's last
+interaction and propagation. This is a mean jump count; the API does not yet
+generate quantum trajectories or a counting distribution `P(N)`.
+
+By default (`integration="exact"`) the window integral is exact. Because the
+trace is linear in the state, the detector is integrated instead of the
+state,
+
+\[
+N_j=\langle\langle X_j|\rho\rangle\rangle,\qquad
+X_j=\varepsilon\,\gamma_j\int_{t_0}^{t_f}\mathcal U^\dagger(t)[L_j^\dagger L_j]\,dt,
+\]
+
+and \(X_j\) is computed once per channel and window from the exponential of
+an augmented Heisenberg-picture generator (dense `expm` or matrix-free
+`expm_multiply`). Each pathway state and grid point then costs one inner
+product. `integration="trapezoid"` keeps the former quadrature over `n_steps`
+samples of the window.
 
 The `EigenbasisKModel` adapter also accepts multiple named operators through
 `observable_op_arrays={"P_a": ..., "P_b": ..., "P_2X": ...}`. Operators must

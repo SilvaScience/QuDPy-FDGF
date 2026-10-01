@@ -31,8 +31,8 @@ R2 = FrequencyPathway(name="R2", interactions=("Bu", "Bd", "Ku"),
 protocol = standard_nq_protocol(order=1, n_interactions=3, nq_interval=1,
                                 detection_interval=3, nq_axis="omega_1q",
                                 detection_axis="omega_emit")
-axes = {"omega_1q": np.linspace(-2.5, -1.5, 11),
-        "omega_emit": np.linspace(1.5, 2.5, 11)}
+axes = {"omega_1q": np.linspace(-2.5, -1.5, 41),
+        "omega_emit": np.linspace(1.5, 2.5, 41)}
 
 
 def run(backend):
@@ -59,7 +59,7 @@ def run(backend):
 
 dense, t_dense = run("dense")
 sparse, t_sparse = run("sparse_sector")
-report = {"grid": [11, 11], "t2": 10.0, "eta": 0.002,
+report = {"grid": [41, 41], "t2": 10.0, "eta": 0.002,
           "time_dense_s": t_dense, "time_sparse_s": t_sparse, "relative_difference": {}}
 worst = 0.0
 for name in ("polarization", "population", "fluorescence"):

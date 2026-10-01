@@ -13,7 +13,7 @@ Run the scripts from this directory: `python bench_scaling.py`, etc.
 
 | Script | What it measures | Output | Time |
 |---|---|---|---|
-| `bench_example1_dense_sparse.py` | Dense versus sparse backend, Example 1 with its three observables (polarization, action population, integrated fluorescence), 11 x 11 grid | `example1_dense_sparse.json` | ~25 min (sparse integrated fluorescence) |
+| `bench_example1_dense_sparse.py` | Dense versus sparse backend, Example 1 with its three observables (polarization, action population, integrated fluorescence), 41 x 41 grid of Listing 1 | `example1_dense_sparse.json` | ~5 s |
 | `bench_example3_dense_sparse.py` | Dense versus sparse backend, Example 3 (fifth-order 2Q, 7 UFSS pathways), 31 x 31 grid | `example3_dense_sparse.json` | ~20 s |
 | `bench_scaling.py` | Time and peak memory versus Hilbert dimension D, dense and sparse, dissipative Frenkel chain (`frenkel_model.py`), one process per case | `scaling.json` | ~15 min |
 | `bench_gmres_eta.py` | GMRES iterations per shifted Liouville solve versus eta, D = 22, with and without dissipation | `gmres_eta.json` | ~3 min |

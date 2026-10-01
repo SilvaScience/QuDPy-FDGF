@@ -1,19 +1,19 @@
 {
   "grid": [
-    11,
-    11
+    41,
+    41
   ],
   "t2": 10.0,
   "eta": 0.002,
-  "time_dense_s": 0.7501613001804799,
-  "time_sparse_s": 1550.6658018999733,
+  "time_dense_s": 0.3163341998588294,
+  "time_sparse_s": 4.21204309980385,
   "relative_difference": {
-    "polarization/R1": 1.288220982190594e-15,
-    "polarization/R2": 1.1003575126295361e-15,
-    "population/R1": 1.288220982190594e-15,
-    "population/R2": 1.1003575126295361e-15,
-    "fluorescence/R1": 1.2966896963454135e-15,
-    "fluorescence/R2": 1.1421701884555245e-15
+    "polarization/R1": 2.782629360826425e-15,
+    "polarization/R2": 2.8601036293747704e-15,
+    "population/R1": 2.782629360826425e-15,
+    "population/R2": 2.8601036293747704e-15,
+    "fluorescence/R1": 2.697317113650479e-15,
+    "fluorescence/R2": 2.8336610853875316e-15
   },
-  "worst": 1.2966896963454135e-15
+  "worst": 2.8601036293747704e-15
 }

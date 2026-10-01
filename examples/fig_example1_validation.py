@@ -2,7 +2,8 @@
 
 (a) peak amplitude of R1 (SE) and R2 (GSB) versus t2, normalized to t2 = 0;
 (b) N_rad^(4)(T) / P_e^(4) for R1 versus the detection window T;
-(c) relative quadrature error of (b) at T = 5/gamma_1 versus n_steps.
+(c) relative error of (b) at T = 5/gamma_1: legacy trapezoidal option versus n_steps,
+    and the default exact (Heisenberg-picture) evaluation.
 
 The model is the one of examples/two_level_open_observables.ipynb.
 Labels use gamma_1 = 1/T1 (population decay rate) as in the revised manuscript.
@@ -71,11 +72,11 @@ print(f"(a) max |R1 - exp(-gamma_1 t2)| = {err_a:.1e};  R2 spread = {np.ptp(amp[
 
 
 # ------------------------------------------------------------------ (b), (c) integrated fluorescence
-def fluorescence_ratio(T, n_steps=101):
+def fluorescence_ratio(T, n_steps=101, integration="exact"):
     obs = {
         "pop": ObservableSpec.action("pop", fourth_interaction="Bu", operator="excited_population"),
-        "fl": ObservableSpec.mean_jump("fl", radiative, time_window=(0.0, T),
-                                       n_steps=n_steps, fourth_interaction="Bu"),
+        "fl": ObservableSpec.mean_jump("fl", radiative, time_window=(0.0, T), n_steps=n_steps,
+                                       fourth_interaction="Bu", integration=integration),
     }
     res = at_peak(10.0, (R1,), obs)
     return (res.observables["fl"]["R1"][0, 0] / res.observables["pop"]["R1"][0, 0]).real
@@ -88,12 +89,14 @@ exact = 1.0 - np.exp(-gamma_1 * T_used)
 
 n_grid = np.unique(np.round(np.logspace(1, np.log10(2000), 14)).astype(int))
 n_grid = np.union1d(n_grid, [101])
-rel_err = np.array([abs(fluorescence_ratio(T_used, n) - exact) / exact for n in n_grid])
+rel_err = np.array([abs(fluorescence_ratio(T_used, n, "trapezoid") - exact) / exact for n in n_grid])
 err_101 = rel_err[n_grid == 101][0]
 slope = np.polyfit(np.log(n_grid[n_grid >= 30]), np.log(rel_err[n_grid >= 30]), 1)[0]
+err_exact = abs(fluorescence_ratio(T_used) - exact) / exact
 print(f"(b) T = 5/gamma_1 = {T_used:.0f} eV^-1;  max |ratio - (1 - exp(-gamma_1 T))| = "
-      f"{np.max(np.abs(ratio - (1 - np.exp(-gamma_1 * T_grid)))):.1e}")
-print(f"(c) relative error at n_steps = 101: {err_101:.2e};  fitted slope = {slope:.2f}")
+      f"{np.max(np.abs(ratio - (1 - np.exp(-gamma_1 * T_grid)))):.1e}  (exact evaluation)")
+print(f"(c) trapezoid: relative error at n_steps = 101: {err_101:.2e};  fitted slope = {slope:.2f};"
+      f"  exact evaluation: {err_exact:.1e}")
 
 # ------------------------------------------------------------------ figure
 plt.rcParams.update({"font.size": 7, "axes.labelsize": 7, "legend.fontsize": 6,
@@ -121,10 +124,13 @@ b.set(xlim=(0, 200), ylim=(0, 1.1), xlabel=r"$T$ (eV$^{-1}$)",
 b.legend(loc="lower right", frameon=True, framealpha=1.0, edgecolor="none", handlelength=1.5)
 
 c = ax[2]
-c.loglog(n_grid, rel_err, "o", ms=2.2, color="C4", label="observed")
+floor = 1e-16                                    # display level of a machine-precision error
+c.loglog(n_grid, rel_err, "o", ms=2.2, color="C4", label="trapezoid")
 c.loglog(n_grid, err_101 * (n_grid / 101.0) ** -2, color="0.3", lw=0.8, ls="--", label=r"$\propto n^{-2}$")
-c.set(xlabel=r"$n_{\mathrm{steps}}$", ylabel="relative error", title="(c) quadrature")
-c.legend(loc="upper right", frameon=False, handlelength=1.5)
+c.axhline(max(err_exact, floor), color="C2", lw=1.2, label="exact (default)")
+c.set(xlabel=r"$n_{\mathrm{steps}}$", ylabel="relative error", title="(c) window integral",
+      ylim=(floor / 10, 1.0))
+c.legend(loc="center right", frameon=False, handlelength=1.5)
 
 fig.savefig(OUT / "fig_example1_validation.pdf")
 fig.savefig(OUT / "fig_example1_validation.png", dpi=200)
