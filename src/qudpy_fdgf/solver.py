@@ -18,6 +18,7 @@ from .backends import (
     SparseSectorBackend,
 )
 from .capabilities import Capabilities, ModelRequirements
+from .diagnostics import decay_rates
 from .exceptions import CapabilityError
 from .observables import ObservableSpec, normalize_observables
 from .pathways import FrequencyPathway
@@ -532,6 +533,19 @@ class SpectroscopySolver:
             observable_components[name] = component_values
         result.observable_components = observable_components
         return result
+
+    def decay_rates(self, *, modes=False, max_mode_dimension=40):
+        """Loaded model -> population and coherence decay rates of its channels.
+
+        Reports, in the eigenbasis of the Hamiltonian, the secular decay rate
+        of every population and coherence implied by the declared GKSL
+        channels, so that the physical meaning of each Lindblad coefficient
+        can be checked before a spectrum is computed. ``modes=True`` adds the
+        exact eigenvalues of the generator (D <= max_mode_dimension).
+        """
+        self._require_ready()
+        return decay_rates(self.backend, modes=modes,
+                           max_mode_dimension=max_mode_dimension)
 
     def estimate_memory(self):
         """Backend layout -> minimum structural memory estimates."""

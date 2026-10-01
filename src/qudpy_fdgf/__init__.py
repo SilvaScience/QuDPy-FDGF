@@ -48,6 +48,7 @@ from .plotting import SpectroscopyPlotter
 from .solver import SpectroscopySolver
 from .model_adapters import EigenbasisKModel, ExcitationSectorModel
 from .generators import EvolutionGenerator
+from .diagnostics import DecayRates, decay_rates
 
 __all__ = [
     "BackendCapabilities",
@@ -55,6 +56,7 @@ __all__ = [
     "CapabilityError",
     "CollapseChannel",
     "ConvergenceError",
+    "DecayRates",
     "DenseDensityBlock",
     "DensityState",
     "EigenbasisKModel",
@@ -83,6 +85,7 @@ __all__ = [
     "SpectrumResult",
     "ThermodynamicContext",
     "coherence_orders_from_interactions",
+    "decay_rates",
     "standard_nq_protocol",
     "translate_ufss_diagrams",
     "normalize_observables",
