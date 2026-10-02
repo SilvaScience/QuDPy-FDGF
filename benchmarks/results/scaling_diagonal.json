@@ -1,0 +1,89 @@
+[
+  {
+    "backend": "sparse_sector",
+    "preconditioner": "diagonal",
+    "L": 4,
+    "D": 16,
+    "build_s": 0.001267199870198965,
+    "spectrum_s": 0.08323300001211464,
+    "peak_MB": 0.561152,
+    "gmres_calls": 54,
+    "gmres_mean_iterations": 1.0,
+    "gmres_max_iterations": 1,
+    "relative_difference_to_dense": 8.346905549878133e-16
+  },
+  {
+    "backend": "sparse_sector",
+    "preconditioner": "diagonal",
+    "L": 5,
+    "D": 31,
+    "build_s": 0.001730100018903613,
+    "spectrum_s": 0.14396240003407001,
+    "peak_MB": 0.663552,
+    "gmres_calls": 54,
+    "gmres_mean_iterations": 1.0,
+    "gmres_max_iterations": 1,
+    "relative_difference_to_dense": 2.024394729994197e-15
+  },
+  {
+    "backend": "sparse_sector",
+    "preconditioner": "diagonal",
+    "L": 6,
+    "D": 57,
+    "build_s": 0.0025585999246686697,
+    "spectrum_s": 0.2692835000343621,
+    "peak_MB": 0.970752,
+    "gmres_calls": 54,
+    "gmres_mean_iterations": 1.0,
+    "gmres_max_iterations": 1,
+    "relative_difference_to_dense": 7.5891996690790045e-16
+  },
+  {
+    "backend": "sparse_sector",
+    "preconditioner": "diagonal",
+    "L": 7,
+    "D": 99,
+    "build_s": 0.0072963000275194645,
+    "spectrum_s": 0.5338007998652756,
+    "peak_MB": 3.067904,
+    "gmres_calls": 54,
+    "gmres_mean_iterations": 1.0,
+    "gmres_max_iterations": 1
+  },
+  {
+    "backend": "sparse_sector",
+    "preconditioner": "diagonal",
+    "L": 8,
+    "D": 163,
+    "build_s": 0.00883050006814301,
+    "spectrum_s": 1.1495006000623107,
+    "peak_MB": 8.409088,
+    "gmres_calls": 54,
+    "gmres_mean_iterations": 1.0,
+    "gmres_max_iterations": 1
+  },
+  {
+    "backend": "sparse_sector",
+    "preconditioner": "diagonal",
+    "L": 9,
+    "D": 256,
+    "build_s": 0.021358099998906255,
+    "spectrum_s": 2.959248499944806,
+    "peak_MB": 20.955136,
+    "gmres_calls": 54,
+    "gmres_mean_iterations": 1.0,
+    "gmres_max_iterations": 1
+  },
+  {
+    "backend": "sparse_sector",
+    "preconditioner": "diagonal",
+    "L": 10,
+    "D": 386,
+    "build_s": 0.05258799996227026,
+    "spectrum_s": 6.352379699936137,
+    "peak_MB": 46.084096,
+    "gmres_calls": 54,
+    "gmres_mean_iterations": 1.0,
+    "gmres_max_iterations": 1
+  }
+]

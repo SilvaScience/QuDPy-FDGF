@@ -23,7 +23,14 @@ class SparseSectorBackend(BackendBase):
     """Pathway inputs -> sparse ket/bra branch propagation.
 
     Time evolution and Hilbert resolvents remain matrix-free.
+    ``preconditioner="diagonal"`` preconditions every GMRES resolvent with the
+    inverse of the shifted diagonal of the generator (or of the Hamiltonian).
+    The diagonal is exact for a closed model supplied in its eigenbasis, so
+    each solve then converges in one iteration; with collapse channels that
+    couple dyads it remains an approximation.
     """
+
+    preconditioners = (None, "diagonal")
 
     name = "sparse_sector"
     capabilities = Capabilities(
@@ -56,11 +63,18 @@ class SparseSectorBackend(BackendBase):
         krylov_tolerance=1e-10,
         krylov_maxiter=None,
         resolvent_restart=None,
+        preconditioner=None,
         cache_propagations=True,
         max_cache_entries=32,
         **options,
     ):
         super().__init__(eta=eta, **options)
+        if preconditioner not in self.preconditioners:
+            raise ValueError(
+                "preconditioner must be None or 'diagonal'; "
+                f"got {preconditioner!r}."
+            )
+        self.preconditioner = preconditioner
         self.krylov_tolerance = float(krylov_tolerance)
         self.krylov_maxiter = (
             None if krylov_maxiter is None else int(krylov_maxiter)
@@ -74,15 +88,35 @@ class SparseSectorBackend(BackendBase):
         self._liouville_time_cache = OrderedDict()
         self._integrated_detector_cache = {}
         self._liouville = None
+        self._liouville_diagonal = None
+        self._hamiltonian_diagonal = None
         self._initial_density_vector = None
 
     def build(self, model, context=None):
         super().build(model, context=context)
         self._liouville = self.generator.linear_operator
+        self._liouville_diagonal = None
+        self._hamiltonian_diagonal = None
+        if self.preconditioner == "diagonal":
+            self._liouville_diagonal = self.generator.diagonal()
+            self._hamiltonian_diagonal, _ = self.generator.operator_diagonal(
+                self._hamiltonian
+            )
         self._initial_density_vector = self._initial_density_matrix.reshape(
             -1, order="F"
         )
         return self
+
+    @staticmethod
+    def _diagonal_preconditioner(shifted_diagonal):
+        """Shifted diagonal d -> LinearOperator applying v / d."""
+        size = shifted_diagonal.size
+        return LinearOperator(
+            (size, size),
+            dtype=np.complex128,
+            matvec=lambda value: np.asarray(value).reshape(-1)
+            / shifted_diagonal,
+        )
 
     def clear_caches(self):
         self._time_cache.clear()
@@ -174,9 +208,17 @@ class SparseSectorBackend(BackendBase):
             rmatvec=lambda value: np.conj(shift) * value
             - self._liouville.rmatvec(value),
         )
+        preconditioner = (
+            None
+            if self._liouville_diagonal is None
+            else self._diagonal_preconditioner(
+                shift - self._liouville_diagonal
+            )
+        )
         raw_solution, info = gmres(
             operator,
             density_vector,
+            M=preconditioner,
             rtol=self.krylov_tolerance,
             atol=0.0,
             restart=self.resolvent_restart,
@@ -550,9 +592,17 @@ class SparseSectorBackend(BackendBase):
             rmatvec=lambda value: np.conj(shift) * value
             - self._hamiltonian.rmatvec(value),
         )
+        preconditioner = (
+            None
+            if self._hamiltonian_diagonal is None
+            else self._diagonal_preconditioner(
+                shift - self._hamiltonian_diagonal
+            )
+        )
         solution, info = gmres(
             operator,
             vector,
+            M=preconditioner,
             x0=initial_guess,
             rtol=self.krylov_tolerance,
             atol=0.0,

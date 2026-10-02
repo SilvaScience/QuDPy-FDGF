@@ -4,12 +4,17 @@ XXZ chain (L = 6, N_max = 4, D = 57, canonical state at 4 K), rephasing GSB + SE
 t2 = 0, 3 x 3 subgrid of the published window, eta from 0.3 to 0.003 meV (production:
 0.03 meV). The generator is closed, so eta alone keeps the shifted systems away from
 singularity. The GMRES call of the sparse backend is wrapped to count inner iterations;
-the solver code is not modified. The dense backend at the same eta is the reference.
+the solver code is not modified. The dense backend at the same eta is the reference; its
+spectra are saved and reused by later runs.
+
+Usage:  python bench_gmres_eta.py            (plain GMRES, writes results/gmres_eta.json)
+        python bench_gmres_eta.py diagonal   (diagonal preconditioner, results/gmres_eta_diagonal.json)
 """
 import os
 for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_v, "1")
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -20,6 +25,8 @@ from qudpy_fdgf.exceptions import ConvergenceError
 from example_models import EX2, EX2_PATHWAYS, EX2_PROTOCOL, example2_context, example2_model
 
 ETAS = (0.3, 0.1, 0.03, 0.01, 0.003)
+PRECONDITIONER = sys.argv[1] if len(sys.argv) > 1 else None
+RESULT = "gmres_eta.json" if PRECONDITIONER is None else f"gmres_eta_{PRECONDITIONER}.json"
 OUT = Path(__file__).resolve().parent / "results"
 OUT.mkdir(exist_ok=True)
 AXES = {"omega_1q": np.linspace(-1.55, -0.55, 3), "omega_emit": np.linspace(0.55, 1.55, 3)}
@@ -42,16 +49,22 @@ ss.gmres = counting
 rows = []
 for eta in ETAS:
     model, _ = example2_model()
-    dense = SpectroscopySolver(backend="dense", eta=eta, cache_resolvents=False)   # memory
-    dense.feed_model(model, context=example2_context())
-    ref = dense.generate_spectrum(EX2_PROTOCOL, AXES, pathways=EX2_PATHWAYS,
-                                  fixed_coordinates={"t2": EX2["t2"]}).components["rephasing"]
-    del dense
-    sparse = SpectroscopySolver(backend="sparse_sector", eta=eta, krylov_tolerance=EX2["krylov_tolerance"])
+    reference_file = OUT / f"gmres_eta_dense_{eta}.npy"
+    if reference_file.exists():
+        ref = np.load(reference_file)
+    else:
+        dense = SpectroscopySolver(backend="dense", eta=eta, cache_resolvents=False)   # memory
+        dense.feed_model(model, context=example2_context())
+        ref = dense.generate_spectrum(EX2_PROTOCOL, AXES, pathways=EX2_PATHWAYS,
+                                      fixed_coordinates={"t2": EX2["t2"]}).components["rephasing"]
+        del dense
+        np.save(reference_file, ref)
+    sparse = SpectroscopySolver(backend="sparse_sector", eta=eta, krylov_tolerance=EX2["krylov_tolerance"],
+                                preconditioner=PRECONDITIONER)
     sparse.feed_model(model, context=example2_context())
     iterations.clear()
     start = time.perf_counter()
-    row = {"eta_meV": eta, "D": 57}
+    row = {"eta_meV": eta, "D": 57, "preconditioner": PRECONDITIONER}
     try:
         S = sparse.generate_spectrum(EX2_PROTOCOL, AXES, pathways=EX2_PATHWAYS,
                                      fixed_coordinates={"t2": EX2["t2"]}).components["rephasing"]
@@ -64,4 +77,4 @@ for eta in ETAS:
                 "max_iterations": int(max(iterations)) if iterations else None})
     rows.append(row)
     print(json.dumps(row), flush=True)
-    (OUT / "gmres_eta.json").write_text(json.dumps(rows, indent=2))
+    (OUT / RESULT).write_text(json.dumps(rows, indent=2))

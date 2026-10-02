@@ -110,6 +110,39 @@ class EvolutionGenerator:
             )
         return result
 
+    def operator_diagonal(self, operator):
+        """Hilbert operator -> diagonal <x|O|x> and column norms ||O|x>||^2."""
+        diagonal = np.empty(self.dimension, dtype=np.complex128)
+        column_norms = np.empty(self.dimension)
+        basis_vector = np.zeros(self.dimension, dtype=np.complex128)
+        for index in range(self.dimension):
+            basis_vector[index] = 1.0
+            column = np.asarray(operator.matvec(basis_vector)).reshape(-1)
+            basis_vector[index] = 0.0
+            diagonal[index] = column[index]
+            column_norms[index] = float(np.vdot(column, column).real)
+        return diagonal, column_norms
+
+    def diagonal(self):
+        """Generator -> its diagonal in the dyad basis |x><y| (column-stacked).
+
+        A|x><y| has the diagonal coefficient
+        -i(H_xx - H_yy) + sum_c gamma_c [L_xx L_yy^* - (K_xx + K_yy)/2],
+        with K = L^+ L. The real part is never positive, so the shifted
+        diagonal (eta - i omega) - A_xy,xy does not vanish for eta > 0. In the
+        eigenbasis of a closed generator it is the generator itself.
+        """
+        h_diagonal, _ = self.operator_diagonal(self.hamiltonian)
+        result = -1j * (h_diagonal[:, None] - h_diagonal[None, :])
+        for channel, operator in self.collapse_operators:
+            l_diagonal, k_diagonal = self.operator_diagonal(operator)
+            result += channel.rate * (
+                np.outer(l_diagonal, l_diagonal.conj())
+                - 0.5 * k_diagonal[:, None]
+                - 0.5 * k_diagonal[None, :]
+            )
+        return result.reshape(-1, order="F")
+
     def matvec(self, density_vector):
         return self.apply_matrix(density_vector).reshape(-1, order="F")
 

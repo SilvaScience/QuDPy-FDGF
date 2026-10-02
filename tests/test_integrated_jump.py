@@ -44,7 +44,7 @@ def two_level_solver(backend):
     return solver
 
 
-def three_site_chain():
+def three_site_chain(dissipative=True):
     """Hard-core exciton chain, manifolds 0-2, local dephasing and collective decay."""
     n, J = 3, -0.05
     pairs = [(0, 1), (0, 2), (1, 2)]
@@ -62,7 +62,8 @@ def three_site_chain():
     c_ops = tuple((blocks, 0.02) for blocks in number) + ((lowering, 0.005),)
     return ExcitationSectorModel({"0": np.zeros((1, 1), dtype=complex), "1": H1, "2": H2},
                                  {("1", "0"): up10, ("2", "1"): up21},
-                                 c_ops_raw=c_ops, initial_sector="0")
+                                 c_ops_raw=c_ops if dissipative else (),
+                                 initial_sector="0")
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
