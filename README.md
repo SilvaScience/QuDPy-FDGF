@@ -19,17 +19,93 @@ physical model definitions and UFSS for the fifth-order pathway example.
 model. An external model supplies its sectors, Hamiltonian blocks,
 transitions, initial state, and observable.
 
-## Dependencies
+## Requirements and tested versions
 
-- NumPy
-- SciPy
-- Matplotlib (optional, for `SpectroscopyPlotter`)
+| Package | Required | Used for | Tested with |
+|---|---|---|---|
+| Python | 3.10 or later | | 3.13.14 |
+| NumPy | 1.24 or later | core | 2.5.0 |
+| SciPy | 1.10 or later | core (Krylov, GMRES) | 1.18.0 |
+| Matplotlib | 3.7 or later | `SpectroscopyPlotter` and figures | 3.11.0 |
+| QuTiP | optional | physical operators in the examples | 5.3.0 |
+| UFSS | optional | automatic pathway generation (Example 3) | 0.2.5 |
+| pytest | optional | test suite | 9.1.1 |
+| psutil, nbformat, nbclient | optional | `validation/` (memory, command-line notebooks) | 7.2.2, 5.11.1, 0.11.0 |
 
-## Examples, tests, and benchmarks
+Extras of `pip install -e '.[...]'`: `examples` (QuTiP, UFSS, IPython, ipykernel), `validation`
+(the previous ones plus psutil, nbformat, nbclient), `dev` (pytest), `manybody` (TeNPy, only for
+`qudpy_fdgf.experimental`). All tests and notebooks were run on Windows 11 with the versions
+above. BLAS is restricted to one thread (`OMP_NUM_THREADS=1`) for the timings of `validation/`.
 
-- `examples/quickstart.py`: open two-level system, linear and third-order
-  rephasing responses, with analytical checks (about 2 s). It is the Quick
-  start of the API documentation.
+## Repository layout
+
+```text
+src/qudpy_fdgf/          the package (generic engine, no physical model)
+    solver.py            SpectroscopySolver: pathways, protocols, spectra, decay_rates()
+    contracts.py         model contract: SectorModel, states, ThermodynamicContext, CollapseChannel
+    model_adapters.py    EigenbasisKModel, ExcitationSectorModel (build a model from arrays or Qobj)
+    pathways.py          Interaction, FrequencyPathway, translate_ufss_diagrams
+    protocols.py         PropagationInterval, SpectroscopyProtocol, standard_nq_protocol
+    observables.py       ObservableSpec: polarization, action detection, jump counts
+    generators.py        matrix-free Liouville generator actions
+    backends/            DenseLiouvilleBackend (reference), SparseSectorBackend (matrix-free)
+    diagnostics.py       DecayRates (rates implied by the declared collapse channels)
+    results.py           SpectrumResult, PathwayResult, PlotResult
+    plotting.py          SpectroscopyPlotter
+    capabilities.py, exceptions.py
+    experimental/        low-rank and tensor-network prototypes (not part of the released API)
+examples/                quickstart.py and the three examples of the article as notebooks
+    old_scripts/         earlier versions of the examples, kept until the review is finished
+validation/              models.py, analysis/, benchmarks/, results/ (see validation/README.md)
+tests/                   api/ (contracts and options), physics/ (closed-form results and limits)
+docs/                    API reference manual (PDF and LaTeX source)
+```
+
+## Reference test run
+
+Install the package with the examples extra, then run from the repository root.
+
+**1. Quick start** (about 2 s). An open two-level system: linear absorption and third-order
+rephasing response, each followed by its analytical value.
+
+```bash
+python examples/quickstart.py
+```
+
+Expected output:
+
+```text
+linear peak      : 2.0000 eV
+FWHM (numerical) : 0.0202 eV
+2(Gamma_2 + eta) : 0.0202 eV
+rephasing peak   : (omega1q, omega3) = (-2.000, 2.000) eV
+|S| at peak      : 1225.37
+2 mu^4/(Gamma_2 + eta)^2 : 1225.37
+```
+
+**2. Example 1** (about 10 s): run all cells of `examples/example1_two_level_open.ipynb`. The
+cell of Section 7 prints
+
+```text
+peak = (-2.000, 2.000) eV
+max|S_pop + i S_pol| / max|S_pol| = 0.0e+00
+N_fl / S_pop = 0.993262; 1 - exp(-5) = 0.993262
+```
+
+and saves its results in `validation/results/data/example1.npz`.
+
+**3. Test suite** (about 15 s).
+
+```bash
+python -m pytest
+```
+
+Expected: `32 passed` in about 15 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+
+## Examples, tests, and validation
+
+- `examples/quickstart.py`: open two-level system, linear and third-order rephasing responses,
+  with analytical checks (about 2 s). It is the Quick start of the API documentation.
 - `examples/example{1,2,3}_*.ipynb`: the three examples of the manuscript, as notebooks (see
   `examples/README.md`).
 - `python -m pytest`: runs `tests/` in about 15 s (`-m "not slow"` skips the slowest). `tests/api/`
@@ -39,6 +115,7 @@ transitions, initial state, and observable.
 - `validation/`: analysis notebooks (convergence, analytical limits), benchmark notebooks
   and scripts (time, memory, comparison with the original QuDPy), shared models and results.
   See `validation/README.md`.
+- `docs/`: the API reference manual.
 
 ## Dependency direction
 
