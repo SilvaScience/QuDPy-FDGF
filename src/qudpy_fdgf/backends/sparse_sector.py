@@ -123,49 +123,36 @@ class SparseSectorBackend(BackendBase):
         self._liouville_time_cache.clear()
         self._integrated_detector_cache.clear()
 
-    def _apply_to_columns(self, vector, action):
-        """Matrix and Hilbert action -> column-wise action."""
+    def _density_matrix(self, vector):
+        """Column-stacked density vector -> square matrix."""
         dimension = self.layout.total_dimension
-        matrix = np.asarray(vector, dtype=np.complex128).reshape(
+        return np.asarray(vector, dtype=np.complex128).reshape(
             (dimension, dimension), order="F"
         )
-        result = np.empty_like(matrix)
-        for column in range(dimension):
-            result[:, column] = action(matrix[:, column])
-        return result
 
     def _liouville_matvec(self, density_vector):
         """Density vector -> matrix-free generator action."""
         return self.generator.matvec(density_vector)
 
+    def _transition_on_matrix(self, matrix, interaction):
+        return self.apply_transition_matrix(
+            matrix,
+            operator_name=interaction.operator,
+            direction=interaction.direction,
+            source_sector=interaction.source_sector,
+            target_sector=interaction.target_sector,
+        )
+
     def _apply_transition_left(self, density_vector, interaction):
-        return self._apply_to_columns(
-            density_vector,
-            lambda vector: self.apply_transition(
-                vector,
-                operator_name=interaction.operator,
-                direction=interaction.direction,
-                source_sector=interaction.source_sector,
-                target_sector=interaction.target_sector,
-            ),
+        """Density vector and interaction -> ``J rho``."""
+        return self._transition_on_matrix(
+            self._density_matrix(density_vector), interaction
         ).reshape(-1, order="F")
 
     def _apply_transition_right(self, density_vector, interaction):
-        """Density vector and interaction -> right bra-adjoint action."""
-        dimension = self.layout.total_dimension
-        rho = np.asarray(density_vector, dtype=np.complex128).reshape(
-            (dimension, dimension), order="F"
-        )
-        acted_dagger = self._apply_to_columns(
-            rho.conj().T.reshape(-1, order="F"),
-            lambda vector: self.apply_transition(
-                vector,
-                operator_name=interaction.operator,
-                direction=interaction.direction,
-                source_sector=interaction.source_sector,
-                target_sector=interaction.target_sector,
-            ),
-        )
+        """Density vector and interaction -> right bra-adjoint action ``rho J^dagger``."""
+        rho = self._density_matrix(density_vector)
+        acted_dagger = self._transition_on_matrix(rho.conj().T, interaction)
         return acted_dagger.conj().T.reshape(-1, order="F")
 
     def _propagate_liouville(self, density_vector, delay):
@@ -236,12 +223,10 @@ class SparseSectorBackend(BackendBase):
         return np.asarray(solution, dtype=np.complex128), residual
 
     def _detect_density(self, density_vector, observable):
-        dimension = self.layout.total_dimension
-        observable_rho = self._apply_to_columns(
-            density_vector,
-            lambda vector: self.apply_detection_operator(vector, observable),
+        observable_rho = self.apply_detection_operator_matrix(
+            self._density_matrix(density_vector), observable
         )
-        value = np.trace(observable_rho.reshape((dimension, dimension)))
+        value = np.trace(observable_rho)
         if observable.kind == "jump_rate":
             value *= observable.efficiency
         return value

@@ -101,7 +101,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `89 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `110 passed` in about 10 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -174,7 +174,10 @@ class MyModel:
 ```
 
 Each block may be a NumPy array, a SciPy sparse matrix, or a
-`scipy.sparse.linalg.LinearOperator`.
+`scipy.sparse.linalg.LinearOperator`. The solver applies a block to the whole density matrix at
+once: a `LinearOperator` should define `matmat`/`rmatmat` when it can do so faster than a loop over
+columns (the default SciPy implementation is that loop); any object with `shape`, `matvec` and
+`rmatvec` still works.
 
 `initial_state()` remains available as a backward-compatible fallback for a
 pure state. The solver never builds a thermal basis, chooses thermally

@@ -54,3 +54,39 @@ def three_site_chain(dissipative=True):
                                  {("1", "0"): up10, ("2", "1"): up21},
                                  c_ops_raw=c_ops if dissipative else (),
                                  initial_sector="0")
+
+
+def reference_generator_action(generator, matrix, adjoint=False):
+    """Action of a generator on a matrix, one column at a time (the implementation before step 3).
+
+    Uses only ``matvec``/``rmatvec`` of the Hamiltonian and of the collapse operators. It is the
+    reference for the vectorized action of ``EvolutionGenerator``.
+    """
+    matrix = np.asarray(matrix, dtype=complex)
+
+    def columns(block, action):
+        out = np.empty_like(block)
+        for index in range(block.shape[1]):
+            out[:, index] = action(block[:, index])
+        return out
+
+    def right(block, adjoint_action):
+        return columns(block.conj().T, adjoint_action).conj().T
+
+    def k_action(operator):
+        return lambda vector: operator.rmatvec(operator.matvec(vector))
+
+    h = generator.hamiltonian
+    if not adjoint:
+        result = -1j * (columns(matrix, h.matvec) - right(matrix, h.rmatvec))
+        for channel, op in generator.collapse_operators:
+            jump = right(columns(matrix, op.matvec), op.matvec)
+            result += channel.rate * (jump - 0.5 * columns(matrix, k_action(op))
+                                      - 0.5 * right(matrix, k_action(op)))
+    else:
+        result = 1j * (columns(matrix, h.rmatvec) - right(matrix, h.matvec))
+        for channel, op in generator.collapse_operators:
+            jump = right(columns(matrix, op.rmatvec), op.rmatvec)
+            result += channel.rate * (jump - 0.5 * columns(matrix, k_action(op))
+                                      - 0.5 * right(matrix, k_action(op)))
+    return result

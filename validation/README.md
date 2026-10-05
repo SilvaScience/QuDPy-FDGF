@@ -74,6 +74,7 @@ Run a script from anywhere, for example `python validation/benchmarks/scripts/be
 | `bench_example2_dense_sparse.py` | Dense versus sparse backend, Example 2 (D = 57), 5 x 5 grid | `example2_dense_sparse.json` | ~30 min |
 | `bench_example3_dense_sparse.py` | Dense versus sparse backend, Example 3 (fifth order, 7 pathways), 31 x 31 grid | `example3_dense_sparse.json` | ~20 s |
 | `bench_scaling.py` | Time and peak memory versus Hilbert dimension D, Example 2 enlarged from L = 4 to 8 sites (`diagonal` argument: preconditioned sparse runs up to L = 10), one process per case | `scaling.json`, `scaling_diagonal.json` | ~15 min |
+| `bench_generator_action.py` | One application of the Liouvillian, matrix products versus one call per column (D = 57 and 163), and a 2 x 2 spectrum at D = 57 | `generator_action.json` | ~1 min |
 | `bench_gmres_eta.py` | GMRES iterations per resolvent solve versus η, D = 57 (`diagonal` argument: with the preconditioner) | `gmres_eta.json`, `gmres_eta_diagonal.json` | ~3 min |
 | `bench_time_fft.py` | Frequency domain versus time sampling + transform, two-level system, three linewidths, targets 1e-2 to 1e-4 | `time_fft.json` | ~5 min |
 | `bench_time_fft_ex3.py` | Same comparison for Example 3, at η = 8 and 2 meV, with an extrapolation for the original QuDPy | `time_fft_ex3.json` | ~5 min |

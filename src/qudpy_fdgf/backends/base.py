@@ -12,6 +12,7 @@ import inspect
 import warnings
 
 import numpy as np
+from scipy.sparse import issparse
 from scipy.sparse.linalg import LinearOperator
 
 from ..capabilities import BackendCapabilities, Capabilities
@@ -24,7 +25,7 @@ from ..contracts import (
     ThermodynamicContext,
 )
 from ..exceptions import ModelConsistencyWarning, ModelContractError, SectorError
-from ..generators import EvolutionGenerator
+from ..generators import EvolutionGenerator, operator_matmat, operator_rmatmat
 from ..observables import ObservableSpec
 
 
@@ -42,6 +43,36 @@ def apply_adjoint_operator(operator, vector):
     if hasattr(operator, "getH"):
         return np.asarray(operator.getH() @ vector, dtype=np.complex128)
     return np.asarray(operator.conj().T @ vector, dtype=np.complex128)
+
+
+def _is_array_like(operator):
+    return isinstance(operator, np.ndarray) or issparse(operator)
+
+
+def apply_operator_matrix(operator, matrix):
+    """Array, sparse matrix, or operator and matrix -> operator action on every column."""
+    matrix = np.asarray(matrix, dtype=np.complex128)
+    if _is_array_like(operator):
+        return np.asarray(operator @ matrix, dtype=np.complex128)
+    if hasattr(operator, "matvec") or hasattr(operator, "matmat"):
+        return operator_matmat(operator, matrix)
+    return np.asarray(operator @ matrix, dtype=np.complex128)
+
+
+def apply_adjoint_operator_matrix(operator, matrix):
+    """Array, sparse matrix, or operator and matrix -> adjoint action on every column.
+
+    For arrays, O^dagger M = conj(O^T conj(M)): the transpose of a dense or CSR operator is a
+    view, so no adjoint is built at each call.
+    """
+    matrix = np.asarray(matrix, dtype=np.complex128)
+    if _is_array_like(operator):
+        return np.asarray((operator.T @ matrix.conj()).conj(), dtype=np.complex128)
+    if hasattr(operator, "rmatvec") or hasattr(operator, "rmatmat"):
+        return operator_rmatmat(operator, matrix)
+    if hasattr(operator, "getH"):
+        return np.asarray(operator.getH() @ matrix, dtype=np.complex128)
+    return np.asarray(operator.conj().T @ matrix, dtype=np.complex128)
 
 
 def operator_shape(operator):
@@ -173,6 +204,8 @@ class BackendBase(ABC):
             dtype=np.complex128,
             matvec=self._hamiltonian_matvec,
             rmatvec=self._hamiltonian_rmatvec,
+            matmat=self._hamiltonian_matmat,
+            rmatmat=self._hamiltonian_rmatmat,
         )
         self._check_hamiltonian_hermiticity()
         self._cache_and_validate_collapse_channels()
@@ -438,53 +471,69 @@ class BackendBase(ABC):
                 family="hamiltonian_blocks",
             )
 
-    def _hamiltonian_matvec(self, vector):
-        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
-        if vector.size != self.layout.total_dimension:
+    def _matrix_argument(self, matrix):
+        matrix = np.asarray(matrix, dtype=np.complex128)
+        if matrix.ndim != 2 or matrix.shape[0] != self.layout.total_dimension:
             raise ValueError("Size is incompatible with the Hilbert space.")
-        result = self.layout.empty()
+        return matrix
+
+    def _hamiltonian_matmat(self, matrix):
+        matrix = self._matrix_argument(matrix)
+        result = np.zeros(matrix.shape, dtype=np.complex128)
         for source, blocks in self._hamiltonian_blocks.items():
-            source_vector = self.layout.sector_view(vector, source)
+            source_matrix = matrix[self.layout.slices[source]]
             for target, operator in blocks.items():
-                result[self.layout.slices[target]] += apply_operator(
-                    operator, source_vector
+                result[self.layout.slices[target]] += apply_operator_matrix(
+                    operator, source_matrix
                 )
         return result
 
-    def _hamiltonian_rmatvec(self, vector):
-        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
-        if vector.size != self.layout.total_dimension:
-            raise ValueError("Size is incompatible with the Hilbert space.")
-        result = self.layout.empty()
+    def _hamiltonian_rmatmat(self, matrix):
+        matrix = self._matrix_argument(matrix)
+        result = np.zeros(matrix.shape, dtype=np.complex128)
         for source, blocks in self._hamiltonian_blocks.items():
             for target, operator in blocks.items():
-                target_vector = self.layout.sector_view(vector, target)
-                result[self.layout.slices[source]] += apply_adjoint_operator(
-                    operator, target_vector
+                result[self.layout.slices[source]] += apply_adjoint_operator_matrix(
+                    operator, matrix[self.layout.slices[target]]
+                )
+        return result
+
+    def _hamiltonian_matvec(self, vector):
+        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
+        return self._hamiltonian_matmat(vector[:, None])[:, 0]
+
+    def _hamiltonian_rmatvec(self, vector):
+        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
+        return self._hamiltonian_rmatmat(vector[:, None])[:, 0]
+
+    def _block_operator_matmat(self, blocks_by_source, matrix):
+        matrix = self._matrix_argument(matrix)
+        result = np.zeros(matrix.shape, dtype=np.complex128)
+        for source, blocks in blocks_by_source.items():
+            source_matrix = matrix[self.layout.slices[source]]
+            for target, operator in blocks.items():
+                result[self.layout.slices[target]] += apply_operator_matrix(
+                    operator, source_matrix
+                )
+        return result
+
+    def _block_operator_rmatmat(self, blocks_by_source, matrix):
+        matrix = self._matrix_argument(matrix)
+        result = np.zeros(matrix.shape, dtype=np.complex128)
+        for source, blocks in blocks_by_source.items():
+            for target, operator in blocks.items():
+                result[self.layout.slices[source]] += apply_adjoint_operator_matrix(
+                    operator, matrix[self.layout.slices[target]]
                 )
         return result
 
     def _block_operator_matvec(self, blocks_by_source, vector):
         vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
-        result = self.layout.empty()
-        for source, blocks in blocks_by_source.items():
-            source_vector = self.layout.sector_view(vector, source)
-            for target, operator in blocks.items():
-                result[self.layout.slices[target]] += apply_operator(
-                    operator, source_vector
-                )
-        return result
+        return self._block_operator_matmat(blocks_by_source, vector[:, None])[:, 0]
 
     def _block_operator_rmatvec(self, blocks_by_source, vector):
         vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
-        result = self.layout.empty()
-        for source, blocks in blocks_by_source.items():
-            for target, operator in blocks.items():
-                target_vector = self.layout.sector_view(vector, target)
-                result[self.layout.slices[source]] += apply_adjoint_operator(
-                    operator, target_vector
-                )
-        return result
+        return self._block_operator_rmatmat(blocks_by_source, vector[:, None])[:, 0]
 
     def _cache_and_validate_collapse_channels(self):
         method = getattr(self.model, "collapse_channels", None)
@@ -530,6 +579,12 @@ class BackendBase(ABC):
                 rmatvec=lambda value, blocks=normalized: (
                     self._block_operator_rmatvec(blocks, value)
                 ),
+                matmat=lambda value, blocks=normalized: (
+                    self._block_operator_matmat(blocks, value)
+                ),
+                rmatmat=lambda value, blocks=normalized: (
+                    self._block_operator_rmatmat(blocks, value)
+                ),
             )
             channels.append(channel)
             operators.append((channel, operator))
@@ -544,8 +599,8 @@ class BackendBase(ABC):
         """Return GKSL channel names available for jump counting."""
         return tuple(channel.name for channel in self._collapse_channels)
 
-    def apply_jump_effect(self, vector, channel_name):
-        """Channel and Hilbert vector -> ``gamma L^dagger L`` action."""
+    def apply_jump_effect_matrix(self, matrix, channel_name):
+        """Channel and Hilbert matrix -> ``gamma L^dagger L`` action on every column."""
         try:
             channel, operator = self._collapse_channel_map[str(channel_name)]
         except KeyError as exc:
@@ -553,27 +608,37 @@ class BackendBase(ABC):
             raise KeyError(
                 f"Unknown GKSL channel {channel_name!r}; available: {available}."
             ) from exc
-        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
-        return channel.rate * apply_adjoint_operator(
+        matrix = np.asarray(matrix, dtype=np.complex128)
+        return channel.rate * apply_adjoint_operator_matrix(
             operator,
-            apply_operator(operator, vector),
+            apply_operator_matrix(operator, matrix),
         )
 
-    def apply_detection_operator(self, vector, observable):
-        """State and observable -> final contraction or jump rate."""
+    def apply_jump_effect(self, vector, channel_name):
+        """Channel and Hilbert vector -> ``gamma L^dagger L`` action."""
+        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
+        return self.apply_jump_effect_matrix(vector[:, None], channel_name)[:, 0]
+
+    def apply_detection_operator_matrix(self, matrix, observable):
+        """Matrix and observable -> final contraction or jump rate on every column."""
         spec = (
             observable
             if isinstance(observable, ObservableSpec)
             else ObservableSpec(name=str(observable))
         )
         if spec.kind == "operator":
-            return self.apply_observable(vector, spec.operator)
+            return self.apply_observable_matrix(matrix, spec.operator)
         if spec.kind == "jump_rate":
-            return self.apply_jump_effect(vector, spec.channel)
+            return self.apply_jump_effect_matrix(matrix, spec.channel)
         raise ValueError(
             "An integrated_jump observable requires time-window evaluation, "
             "not a final contraction."
         )
+
+    def apply_detection_operator(self, vector, observable):
+        """State and observable -> final contraction or jump rate."""
+        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
+        return self.apply_detection_operator_matrix(vector[:, None], observable)[:, 0]
 
     def _get_transition_blocks(self, operator_name, direction, source):
         direction = str(direction).lower()
@@ -589,20 +654,18 @@ class BackendBase(ABC):
             )
         return self._transition_blocks[key]
 
-    def apply_transition(
+    def apply_transition_matrix(
         self,
-        vector,
+        matrix,
         *,
         operator_name,
         direction,
         source_sector=None,
         target_sector=None,
     ):
-        """Sector vector and transition -> concatenated target vector."""
-        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
-        if vector.size != self.layout.total_dimension:
-            raise ValueError("Size is incompatible with the Hilbert space.")
-        result = self.layout.empty()
+        """Matrix and transition -> transition applied to every column."""
+        matrix = self._matrix_argument(matrix)
+        result = np.zeros(matrix.shape, dtype=np.complex128)
         matched_block = False
         sources = (
             (source_sector,)
@@ -612,7 +675,7 @@ class BackendBase(ABC):
         for source in sources:
             if source not in self.layout.dimensions:
                 raise SectorError(f"Unknown source sector: {source!r}")
-            source_vector = self.layout.sector_view(vector, source)
+            source_matrix = matrix[self.layout.slices[source]]
             blocks = self._get_transition_blocks(
                 operator_name, direction, source
             )
@@ -620,8 +683,8 @@ class BackendBase(ABC):
                 if target_sector is not None and target != target_sector:
                     continue
                 matched_block = True
-                result[self.layout.slices[target]] += apply_operator(
-                    operator, source_vector
+                result[self.layout.slices[target]] += apply_operator_matrix(
+                    operator, source_matrix
                 )
         if (
             target_sector is not None
@@ -638,6 +701,25 @@ class BackendBase(ABC):
             )
         return result
 
+    def apply_transition(
+        self,
+        vector,
+        *,
+        operator_name,
+        direction,
+        source_sector=None,
+        target_sector=None,
+    ):
+        """Sector vector and transition -> concatenated target vector."""
+        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
+        return self.apply_transition_matrix(
+            vector[:, None],
+            operator_name=operator_name,
+            direction=direction,
+            source_sector=source_sector,
+            target_sector=target_sector,
+        )[:, 0]
+
     def _get_observable_blocks(self, observable_name, source):
         key = (str(observable_name), source)
         if key not in self._observable_blocks:
@@ -649,31 +731,34 @@ class BackendBase(ABC):
             )
         return self._observable_blocks[key]
 
-    def apply_observable(self, vector, observable_name):
-        """Concatenated vector and observable -> observable action."""
-        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
-        if vector.size != self.layout.total_dimension:
-            raise ValueError("Size is incompatible with the Hilbert space.")
-        result = self.layout.empty()
+    def apply_observable_matrix(self, matrix, observable_name):
+        """Matrix and observable -> observable applied to every column."""
+        matrix = self._matrix_argument(matrix)
+        result = np.zeros(matrix.shape, dtype=np.complex128)
         for source in self.layout.sectors:
-            source_vector = self.layout.sector_view(vector, source)
+            source_matrix = matrix[self.layout.slices[source]]
             for target, operator in self._get_observable_blocks(
                 observable_name, source
             ).items():
-                result[self.layout.slices[target]] += apply_operator(
-                    operator, source_vector
+                result[self.layout.slices[target]] += apply_operator_matrix(
+                    operator, source_matrix
                 )
         return result
 
-    def materialize(self, operator):
-        """Operator action -> dense matrix for small spaces only."""
+    def apply_observable(self, vector, observable_name):
+        """Concatenated vector and observable -> observable action."""
+        vector = np.asarray(vector, dtype=np.complex128).reshape(-1)
+        return self.apply_observable_matrix(vector[:, None], observable_name)[:, 0]
+
+    def materialize(self, operator, *, chunk=64):
+        """Operator action -> dense matrix for small spaces only (columns evaluated by blocks)."""
         rows, columns = operator_shape(operator)
         matrix = np.empty((rows, columns), dtype=np.complex128)
-        basis_vector = np.zeros(columns, dtype=np.complex128)
-        for index in range(columns):
-            basis_vector[index] = 1.0
-            matrix[:, index] = apply_operator(operator, basis_vector)
-            basis_vector[index] = 0.0
+        for first in range(0, columns, chunk):
+            last = min(first + chunk, columns)
+            basis = np.zeros((columns, last - first), dtype=np.complex128)
+            basis[np.arange(first, last), np.arange(last - first)] = 1.0
+            matrix[:, first:last] = apply_operator_matrix(operator, basis)
         return matrix
 
     def clear_caches(self):

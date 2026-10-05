@@ -153,7 +153,7 @@ The minimal contract used by \texttt{feed\_model} is
     \item \texttt{transition\_blocks(...)}, with source sector, operator name, and direction (\texttt{"plus"} or \texttt{"minus"});
     \item \texttt{observable\_blocks(...)}, returning the blocks of a named detection operator for a source sector.
 \end{itemize}
-Hamiltonian blocks may be diagonal or inter-sector. Operator blocks may be dense arrays, sparse matrices, or matrix-free linear operators exposing their shape and forward/adjoint actions.
+Hamiltonian blocks may be diagonal or inter-sector. Operator blocks may be dense arrays, sparse matrices, or matrix-free linear operators exposing their shape and forward/adjoint actions. The backends apply a block to the whole density matrix at once, as a product with the matrix of all its columns. A linear operator should therefore define \texttt{matmat} and \texttt{rmatmat} when it can do better than a loop over columns (every \texttt{scipy.sparse.linalg.LinearOperator} has them, with that loop as default); an object that provides only \texttt{matvec} and \texttt{rmatvec} is still accepted and applied column by column.
 
 \subsubsection{Initial and equilibrium states}
 
@@ -689,6 +689,8 @@ backends use the convention
 \begin{equation}
 \mathcal{L}=-i[\hat{H},\,\cdot\,]+\sum_c\gamma_c\mathcal{D}_c.
 \end{equation}
+
+The action on a density matrix is evaluated with products of the sector blocks with the whole matrix \(\hat\rho\), not column by column: \(\hat H\hat\rho\) and \(\hat\rho\hat H\) for the Hamiltonian, and five products per channel (\(\hat L_c\hat\rho\), \(\hat\rho\hat L_c^\dagger\), \(\hat L_c\hat\rho\hat L_c^\dagger\), \(\hat L_c^\dagger\hat L_c\hat\rho\) and \(\hat\rho\hat L_c^\dagger\hat L_c\), the first two being reused). One application of \(\mathcal{L}\) therefore costs \(2+5n_c\) block-by-matrix products for \(n_c\) channels.
 
 A frequency-domain interval with frequency \(\omega\) and broadening
 \(\eta\) solves the shifted Liouville equation

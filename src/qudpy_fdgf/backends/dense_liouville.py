@@ -142,19 +142,13 @@ class DenseLiouvilleBackend(BackendBase):
         )
         if key in self._transition_matrix_cache:
             return self._transition_matrix_cache[key]
-        dimension = self.layout.total_dimension
-        matrix = np.empty((dimension, dimension), dtype=np.complex128)
-        basis = np.zeros(dimension, dtype=np.complex128)
-        for index in range(dimension):
-            basis[index] = 1.0
-            matrix[:, index] = self.apply_transition(
-                basis,
-                operator_name=interaction.operator,
-                direction=interaction.direction,
-                source_sector=interaction.source_sector,
-                target_sector=interaction.target_sector,
-            )
-            basis[index] = 0.0
+        matrix = self.apply_transition_matrix(
+            np.eye(self.layout.total_dimension, dtype=np.complex128),
+            operator_name=interaction.operator,
+            direction=interaction.direction,
+            source_sector=interaction.source_sector,
+            target_sector=interaction.target_sector,
+        )
         self._transition_matrix_cache[key] = matrix
         return matrix
 
@@ -172,23 +166,11 @@ class DenseLiouvilleBackend(BackendBase):
         key = (spec.kind, spec.operator, spec.channel)
         if key in self._observable_matrix_cache:
             return self._observable_matrix_cache[key]
-        dimension = self.layout.total_dimension
-        matrix = np.empty((dimension, dimension), dtype=np.complex128)
-        basis = np.zeros(dimension, dtype=np.complex128)
+        identity = np.eye(self.layout.total_dimension, dtype=np.complex128)
         if spec.kind == "jump_rate":
-            for index in range(dimension):
-                basis[index] = 1.0
-                matrix[:, index] = self.apply_jump_effect(
-                    basis, spec.channel
-                )
-                basis[index] = 0.0
+            matrix = self.apply_jump_effect_matrix(identity, spec.channel)
         else:
-            for index in range(dimension):
-                basis[index] = 1.0
-                matrix[:, index] = self.apply_observable(
-                    basis, spec.operator
-                )
-                basis[index] = 0.0
+            matrix = self.apply_observable_matrix(identity, spec.operator)
         self._observable_matrix_cache[key] = matrix
         return matrix
 

@@ -1,0 +1,17 @@
+{
+  "actions": {
+    "D57": {
+      "matvec_vectorized_ms": 0.06865499999548774,
+      "matvec_column_loop_ms": 1.4028400000825059,
+      "speedup": 20.43318039727195,
+      "relative_difference": 0.0
+    },
+    "D163": {
+      "matvec_vectorized_ms": 0.574860000051558,
+      "matvec_column_loop_ms": 4.602899998644716,
+      "speedup": 8.006993003917287,
+      "relative_difference": 0.0
+    }
+  },
+  "spectrum_D57_2x2_s": 3.212749199999962
+}

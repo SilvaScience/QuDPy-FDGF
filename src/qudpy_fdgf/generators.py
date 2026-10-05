@@ -11,11 +11,41 @@ from __future__ import annotations
 import numpy as np
 from scipy.sparse.linalg import LinearOperator
 
+_DIAGONAL_CHUNK = 256
+
+
+def _stack_columns(action, matrix):
+    """Vector action and matrix -> action on every column (the output may have another length)."""
+    columns = [np.asarray(action(matrix[:, column]), dtype=np.complex128).reshape(-1)
+               for column in range(matrix.shape[1])]
+    if not columns:
+        return np.empty((0, 0), dtype=np.complex128)
+    return np.column_stack(columns)
+
+
+def operator_matmat(operator, matrix):
+    """Operator and matrix -> ``O @ matrix``, column by column only if ``O`` has no ``matmat``."""
+    matmat = getattr(operator, "matmat", None)
+    if matmat is not None:
+        return np.asarray(matmat(matrix), dtype=np.complex128)
+    return _stack_columns(operator.matvec, matrix)
+
+
+def operator_rmatmat(operator, matrix):
+    """Operator and matrix -> ``O^dagger @ matrix``, column by column only if ``O`` has no ``rmatmat``."""
+    rmatmat = getattr(operator, "rmatmat", None)
+    if rmatmat is not None:
+        return np.asarray(rmatmat(matrix), dtype=np.complex128)
+    return _stack_columns(operator.rmatvec, matrix)
+
 
 class EvolutionGenerator:
     """Hamiltonian and collapse operators -> matrix-free ``A rho``.
 
-    Frequency intervals apply ``[(eta-i*omega)I - A]**-1``.
+    Frequency intervals apply ``[(eta-i*omega)I - A]**-1``. The operators act on the whole
+    density matrix at once (``matmat``/``rmatmat`` when the operator provides them), so that one
+    application of the generator costs a few matrix products instead of a Python loop over the
+    columns of ``rho``.
     """
 
     # Exclude the legacy Green-function ``-1j`` factor to avoid rotating the
@@ -47,80 +77,64 @@ class EvolutionGenerator:
             (self.dimension, self.dimension), order="F"
         )
 
-    def _apply_columns(self, matrix, action):
-        result = np.empty_like(matrix)
-        for column in range(self.dimension):
-            result[:, column] = action(matrix[:, column])
-        return result
+    @staticmethod
+    def _left(matrix, operator, *, dagger=False):
+        """Matrix M and operator O -> O M (``dagger=True``: O^dagger M)."""
+        return operator_rmatmat(operator, matrix) if dagger else operator_matmat(operator, matrix)
 
-    def _left(self, matrix, action):
-        return self._apply_columns(matrix, action)
+    @staticmethod
+    def _right(matrix, operator, *, dagger=False):
+        """Matrix M and operator O -> M O (``dagger=True``: M O^dagger).
 
-    def _right(self, matrix, adjoint_action):
-        """Adjoint action of O -> right multiplication by O."""
-        acted_dagger = self._apply_columns(
-            matrix.conj().T, adjoint_action
-        )
-        return acted_dagger.conj().T
-
-    def _apply_k(self, operator, vector):
-        return operator.rmatvec(operator.matvec(vector))
+        M O = (O^dagger M^dagger)^dagger and M O^dagger = (O M^dagger)^dagger.
+        """
+        conjugate = matrix.conj().T
+        acted = operator_matmat(operator, conjugate) if dagger else operator_rmatmat(operator, conjugate)
+        return acted.conj().T
 
     def apply_matrix(self, density):
+        """rho -> -i[H, rho] + sum_c gamma_c (C rho C^+ - (K rho + rho K)/2), K = C^+ C."""
         density = self._as_matrix(density)
-        h_left = self._left(density, self.hamiltonian.matvec)
-        h_right = self._right(density, self.hamiltonian.rmatvec)
-        result = -1j * (h_left - h_right)
+        result = -1j * (self._left(density, self.hamiltonian) - self._right(density, self.hamiltonian))
 
         for channel, operator in self.collapse_operators:
-            c_rho = self._left(density, operator.matvec)
-            jump = self._right(c_rho, operator.matvec)
-            k_left = self._left(
-                density,
-                lambda value, op=operator: self._apply_k(op, value),
-            )
-            k_right = self._right(
-                density,
-                lambda value, op=operator: self._apply_k(op, value),
-            )
-            result += channel.rate * (
-                jump - 0.5 * k_left - 0.5 * k_right
-            )
+            c_rho = self._left(density, operator)                       # C rho
+            rho_c_dagger = self._right(density, operator, dagger=True)  # rho C^+
+            jump = self._left(rho_c_dagger, operator)                   # C rho C^+
+            k_left = self._left(c_rho, operator, dagger=True)           # C^+ C rho
+            k_right = self._right(rho_c_dagger, operator)               # rho C^+ C
+            result += channel.rate * (jump - 0.5 * k_left - 0.5 * k_right)
         return result
 
     def apply_adjoint_matrix(self, observable):
+        """O -> i[H, O] + sum_c gamma_c (C^+ O C - (K O + O K)/2)."""
         observable = self._as_matrix(observable)
-        h_left = self._left(observable, self.hamiltonian.rmatvec)
-        h_right = self._right(observable, self.hamiltonian.matvec)
-        result = 1j * (h_left - h_right)
+        result = 1j * (
+            self._left(observable, self.hamiltonian, dagger=True)
+            - self._right(observable, self.hamiltonian, dagger=True)
+        )
 
         for channel, operator in self.collapse_operators:
-            c_dagger_o = self._left(observable, operator.rmatvec)
-            jump = self._right(c_dagger_o, operator.rmatvec)
-            k_left = self._left(
-                observable,
-                lambda value, op=operator: self._apply_k(op, value),
-            )
-            k_right = self._right(
-                observable,
-                lambda value, op=operator: self._apply_k(op, value),
-            )
-            result += channel.rate * (
-                jump - 0.5 * k_left - 0.5 * k_right
-            )
+            c_dagger_o = self._left(observable, operator, dagger=True)      # C^+ O
+            jump = self._right(c_dagger_o, operator)                        # C^+ O C
+            c_o = self._left(observable, operator)                          # C O
+            k_left = self._left(c_o, operator, dagger=True)                 # C^+ C O
+            o_c_dagger = self._right(observable, operator, dagger=True)     # O C^+
+            k_right = self._right(o_c_dagger, operator)                     # O C^+ C
+            result += channel.rate * (jump - 0.5 * k_left - 0.5 * k_right)
         return result
 
     def operator_diagonal(self, operator):
         """Hilbert operator -> diagonal <x|O|x> and column norms ||O|x>||^2."""
         diagonal = np.empty(self.dimension, dtype=np.complex128)
         column_norms = np.empty(self.dimension)
-        basis_vector = np.zeros(self.dimension, dtype=np.complex128)
-        for index in range(self.dimension):
-            basis_vector[index] = 1.0
-            column = np.asarray(operator.matvec(basis_vector)).reshape(-1)
-            basis_vector[index] = 0.0
-            diagonal[index] = column[index]
-            column_norms[index] = float(np.vdot(column, column).real)
+        for first in range(0, self.dimension, _DIAGONAL_CHUNK):
+            last = min(first + _DIAGONAL_CHUNK, self.dimension)
+            basis = np.zeros((self.dimension, last - first), dtype=np.complex128)
+            basis[np.arange(first, last), np.arange(last - first)] = 1.0
+            columns = operator_matmat(operator, basis)
+            diagonal[first:last] = columns[np.arange(first, last), np.arange(last - first)]
+            column_norms[first:last] = np.sum(columns.real ** 2 + columns.imag ** 2, axis=0)
         return diagonal, column_norms
 
     def diagonal(self):
