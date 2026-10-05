@@ -44,7 +44,7 @@ src/qudpy_fdgf/          the package (generic engine, no physical model)
     solver.py            SpectroscopySolver: pathways, protocols, spectra, decay_rates()
     contracts.py         model contract: SectorModel, states, ThermodynamicContext, CollapseChannel
     model_adapters.py    EigenbasisKModel, ExcitationSectorModel (build a model from arrays or Qobj)
-    pathways.py          Interaction, FrequencyPathway, translate_ufss_diagrams
+    pathways.py          Interaction, FrequencyPathway, pathways_from_signature, translate_ufss_diagrams
     protocols.py         PropagationInterval, SpectroscopyProtocol, standard_nq_protocol
     observables.py       ObservableSpec: polarization, action detection, jump counts
     generators.py        matrix-free Liouville generator actions
@@ -101,7 +101,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `76 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `89 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -553,6 +553,38 @@ maintained or guaranteed to be stable here.
 
 An `Interaction` may specify a source sector and a target sector. If they are
 omitted, the backend applies every block declared by the model.
+
+### Signatures and completeness
+
+Pulse `j` radiates with the wave-vector sign `s_j = +1` for `Ku` and `Bd` and `-1` for `Kd` and
+`Bu` (`s_j` equals the coherence change). The signal of a pathway set is the sum over **all**
+pathways with the same signature: rephasing `(-,+,+)`, non-rephasing `(+,-,+)`, double quantum
+`(-,-,+,+,+)`, ... Writing the set by hand is error-prone, because a sequence that vanishes for a
+ground-state model can be non-zero with relaxation or a thermal state (for the open two-level
+system, `(Bu, Ku, Ku)` refills the ground-state bleach). `pathways_from_signature` enumerates the
+`2**n` sequences and lets the vanishing ones cancel:
+
+```python
+from qudpy_fdgf import pathways_from_signature, pathway_signature
+
+pathways = pathways_from_signature("-++", component="rephasing")      # 8 sequences, "Bu-Ku-Bd", ...
+result = solver.generate_spectrum(protocol, axes, fixed_coordinates={"t2": 10.0}, pathways=pathways)
+result.components["rephasing"]       # the complete rephasing signal
+result.null_pathways()               # the sequences that vanish for this model
+pathway_signature(("Bu", "Ku", "Bd"))   # (-1, 1, 1)
+```
+
+`max_manifold` and `min_manifold` apply the rule 4(a) of the UFSS diagram generator (ket and
+bra manifold indices stay in `[min, max]`); use them only for a ground-state reference state
+without relaxation between manifolds. For a generated list the zero members are expected and
+are not reported.
+
+`FrequencyPathway` validates its component: `"rephasing"` and `"nonrephasing"` at third order
+require the signatures `(-,+,+)` and `(+,-,+)` and raise `ValueError` otherwise; other component
+names are free. A pathway written by hand that vanishes on the whole grid triggers a
+`NullPathwayWarning` (`generate_spectrum(..., warn_null=False)` silences it), and
+`PropagationInterval(..., signed=True)` makes a protocol check the sign of the coherence order,
+not only its modulus.
 
 ## Current limitations
 

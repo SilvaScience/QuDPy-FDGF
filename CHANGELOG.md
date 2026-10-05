@@ -6,6 +6,16 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 ## Unreleased
 
 ### Added
+- Pathway signatures and completeness: `Interaction.sign`, `FrequencyPathway.signature`,
+  `pathway_signature()`, `pathways_from_signature(signature, component=, max_manifold=,
+  min_manifold=)` which enumerates the `2**n` sequences with a given wave-vector signature.
+  `FrequencyPathway.origin` (`"user"`, `"enumerated"`, `"ufss"`). `FrequencyPathway` rejects the
+  wrong signature for the components `rephasing` and `nonrephasing` at third order (**change**:
+  a hand-written pathway that mixed them now raises `ValueError`).
+- `SpectrumResult.null_pathways()` and `result.diagnostics["null_pathways"]`;
+  `NullPathwayWarning` for a hand-written pathway that vanishes on the whole grid
+  (`generate_spectrum(..., warn_null=False)` silences it).
+- `PropagationInterval(signed=True)`: the protocol checks the sign of the coherence order.
 - `EigenbasisKModel`: `transition_window=(w_min, w_max)` restricts the automatic split of the
   interaction operator to a band of Bohr frequencies; `transition_summary()` reports the fractions
   of `sum |mu_ij|^2` kept, static, degenerate and outside the window (also in `solver.summary()`);

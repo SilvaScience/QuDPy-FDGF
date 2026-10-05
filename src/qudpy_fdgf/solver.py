@@ -20,7 +20,12 @@ from .backends import (
 )
 from .capabilities import Capabilities, ModelRequirements
 from .diagnostics import decay_rates
-from .exceptions import CapabilityError, StationarityError, StationarityWarning
+from .exceptions import (
+    CapabilityError,
+    NullPathwayWarning,
+    StationarityError,
+    StationarityWarning,
+)
 from .observables import ObservableSpec, normalize_observables
 from .pathways import FrequencyPathway
 from .protocols import SpectroscopyProtocol
@@ -369,10 +374,14 @@ class SpectroscopySolver:
         fixed_coordinates=None,
         pathways=None,
         observables=None,
+        warn_null=True,
     ):
         """Protocol and coordinate grid -> multidimensional responses.
 
-        Additional observables reuse each pathway propagation.
+        Additional observables reuse each pathway propagation. ``result.diagnostics["null_pathways"]``
+        lists the pathways that vanish on the whole grid; with ``warn_null`` a pathway written by
+        hand that does is reported by a ``NullPathwayWarning`` (generated lists are not), and so
+        is a result in which every pathway vanishes.
         """
         self._require_ready()
         if not isinstance(protocol, SpectroscopyProtocol):
@@ -463,7 +472,7 @@ class SpectroscopySolver:
                 ][pathway.name]
             observable_components[spec.name] = component_values
 
-        return SpectrumResult(
+        result = SpectrumResult(
             axis_names=axis_names,
             axis_values=axis_values,
             pathways=pathway_values,
@@ -480,6 +489,25 @@ class SpectroscopySolver:
             observables=observable_values,
             observable_components=observable_components,
         )
+        null = result.null_pathways()
+        result.diagnostics["null_pathways"] = null
+        if warn_null and null:
+            origin = {pathway.name: pathway.origin for pathway in selected}
+            reported = [name for name in null if origin[name] == "user"]
+            if reported or len(null) == len(selected):
+                names = reported or list(null)
+                shown = ", ".join(repr(name) for name in names[:5])
+                more = f" and {len(names) - 5} more" if len(names) > 5 else ""
+                warnings.warn(
+                    f"Pathway(s) {shown}{more} give an identically zero response on the whole "
+                    "grid. Check that the interaction sequence is allowed by the transition "
+                    "blocks of the model and that its final coherence order can be read by the "
+                    "detection operator (a polarization needs q = +-1). Set warn_null=False "
+                    "when zero pathways are expected.",
+                    NullPathwayWarning,
+                    stacklevel=2,
+                )
+        return result
 
     def generate_nq_spectrum(
         self,
@@ -490,6 +518,7 @@ class SpectroscopySolver:
         fixed_coordinates=None,
         pathways=None,
         observables=None,
+        warn_null=True,
     ):
         """NQ protocol and grid -> separate ``+NQ`` and ``-NQ`` responses."""
         order = abs(int(order))
@@ -524,6 +553,7 @@ class SpectroscopySolver:
             fixed_coordinates=fixed_coordinates,
             pathways=selected,
             observables=observables,
+            warn_null=warn_null,
         )
         shape = result.shape
         components = dict(result.components)

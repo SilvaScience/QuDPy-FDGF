@@ -17,6 +17,7 @@ import pytest
 from qudpy_fdgf import (
     EigenbasisKModel,
     FrequencyPathway,
+    NullPathwayWarning,
     ObservableSpec,
     SpectroscopySolver,
 )
@@ -113,7 +114,9 @@ def test_complete_rephasing_response_includes_the_relaxation_pathway():
 def test_relaxation_pathway_vanishes_without_radiative_decay():
     solver = example1_solver(gamma_1=0.0)
     axes = {"omega_1q": np.array([-2.0]), "omega_emit": np.array([2.0])}
-    result = solver.generate_spectrum(PROTOCOL, axes, pathways=(R1, R2, R3), fixed_coordinates={"t2": 10.0})
+    with pytest.warns(NullPathwayWarning, match="'R3'"):
+        result = solver.generate_spectrum(PROTOCOL, axes, pathways=(R1, R2, R3), fixed_coordinates={"t2": 10.0})
+    assert result.null_pathways() == ("R3",)
     assert abs(result.pathways["R3"][0, 0]) <= 1e-12 * abs(result.pathways["R2"][0, 0])
     assert result.pathways["R1"][0, 0] == pytest.approx(result.pathways["R2"][0, 0], rel=1e-12)
 

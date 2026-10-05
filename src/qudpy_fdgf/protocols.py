@@ -17,6 +17,9 @@ class PropagationInterval:
     domain: str
     coherence_order: int | None = None
     eta: float | None = None
+    # False: the pathway must have |q| equal to |coherence_order| at this interval (+NQ and -NQ
+    # are both accepted); True: q must equal coherence_order, sign included.
+    signed: bool = False
 
     def __post_init__(self):
         name = str(self.name)
@@ -95,7 +98,15 @@ class SpectroscopyProtocol:
             zip(self.intervals, pathway.coherence_orders), start=1
         ):
             expected = interval.coherence_order
-            if expected is not None and abs(expected) != abs(actual):
+            if expected is None:
+                continue
+            if interval.signed:
+                if expected != actual:
+                    raise ValueError(
+                        f"Incompatible coherence order at step {index}: "
+                        f"q={actual}, expected {expected} (signed interval)."
+                    )
+            elif abs(expected) != abs(actual):
                 raise ValueError(
                     f"Incompatible coherence order at step {index}: "
                     f"|q|={abs(actual)}, expected {abs(expected)}."

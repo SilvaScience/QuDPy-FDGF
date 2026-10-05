@@ -440,7 +440,7 @@ The method \texttt{pathway\_summary()} returns serializable pathway metadata wit
 
 \subsubsection{Propagation protocols}
 
-A \texttt{SpectroscopyProtocol} is an ordered tuple of \texttt{PropagationInterval} objects. Each interval has a unique name, a domain in \texttt{"time"}, \texttt{"frequency"}, or \texttt{"identity"}, an optional coherence order, and an optional interval-specific broadening \texttt{eta}. The protocol validates pathway length, coherence-order magnitude, and coordinates. It separately exposes all coordinate names and its frequency- and time-axis names.
+A \texttt{SpectroscopyProtocol} is an ordered tuple of \texttt{PropagationInterval} objects. Each interval has a unique name, a domain in \texttt{"time"}, \texttt{"frequency"}, or \texttt{"identity"}, an optional coherence order, an optional interval-specific broadening \texttt{eta}, and a flag \texttt{signed}. By default the protocol checks the modulus of the coherence order of a pathway at an interval ($+NQ$ and $-NQ$ are both accepted); with \texttt{signed=True} it checks the sign as well. The protocol validates pathway length, coherence-order magnitude, and coordinates. It separately exposes all coordinate names and its frequency- and time-axis names.
 
 The helper
 \begin{verbatim}
@@ -515,6 +515,7 @@ generate_spectrum(
     fixed_coordinates=None,
     pathways=None,
     observables=None,
+    warn_null=True,
 )
 \end{verbatim}
 evaluates the selected pathways over a multidimensional coordinate grid. The argument \texttt{axes} is a non-empty ordered mapping
@@ -542,7 +543,7 @@ The resulting array shape follows the insertion order of \texttt{axes}. The retu
     \item \texttt{pathways[name]} and component sums in \texttt{components[name]};
     \item per-pathway arrays in \texttt{observables}, indexed first by observable and then by pathway;
     \item component sums in \texttt{observable\_components}, indexed first by observable and then by component;
-    \item pathway metadata and numerical diagnostics.
+    \item pathway metadata and numerical diagnostics, including \texttt{diagnostics["null\_pathways"]} (Sec.~\ref{sec:null-pathways}).
 \end{itemize}
 The default detection of each pathway remains in the legacy \texttt{pathways} and \texttt{components} mappings. Additional requested observables are stored separately, preventing one detector from overwriting another.
 \newline
@@ -565,7 +566,8 @@ generate_nq_spectrum(
     axes,
     fixed_coordinates=None,
     pathways=None,
-    observables=None
+    observables=None,
+    warn_null=True
 )
 \end{verbatim}
 
@@ -1167,12 +1169,13 @@ FrequencyPathway(
     prefactor=None,
     coherence_orders=(),
     detection="polarization",
+    origin="user",
 )
 \end{verbatim}
 
 The number of interactions in a pathway must match the number of intervals in the associated \texttt{SpectroscopyProtocol}. Each interaction is paired with one propagation interval.
 
-The component name is normalized to lower case. The nonrephasing aliases are internally mapped to the canonical unrephasing component. Other names may be used for custom groupings.
+The component name is normalized to lower case. The nonrephasing aliases are internally mapped to the canonical unrephasing component. Other names may be used for custom groupings. The components \texttt{"rephasing"} and \texttt{"unrephasing"} are validated at third order: a pathway whose signature (Sec.~\ref{sec:signatures}) is not $(-,+,+)$, respectively $(+,-,+)$, raises \texttt{ValueError}, because summing pathways of different signatures into one component mixes phase-matching directions. The field \texttt{origin} is \texttt{"user"} for a pathway written by hand, \texttt{"enumerated"} for those returned by \texttt{pathways\_from\_signature} and \texttt{"ufss"} for those of \texttt{translate\_ufss\_diagrams}; it only decides which vanishing pathways are reported (Sec.~\ref{sec:null-pathways}). The property \texttt{signature} and the metadata expose the signature.
 
 
 \subsubsection{Pathway response prefactor}
@@ -1203,6 +1206,32 @@ The final pathway response and all associated observables are multiplied by
 \(c_p\). Therefore, experimental field phases or alternative diagrammatic
 sign conventions should be encoded through \texttt{amplitude} or an explicit
 \texttt{prefactor}.
+
+\subsubsection{Signatures and completeness}
+\label{sec:signatures}
+
+The pulse $j$ of a pathway radiates with the wave-vector sign $s_j=\Delta q_j$ ($+1$ for \texttt{Ku} and \texttt{Bd}, $-1$ for \texttt{Kd} and \texttt{Bu}), so that the signal is emitted in the direction $\sum_js_j\boldsymbol{k}_j$. The tuple $(s_1,\ldots,s_n)$ is the signature of the pathway, returned by \texttt{pathway\_signature(interactions)} and by the property \texttt{FrequencyPathway.signature}; \texttt{Interaction.sign} gives $s_j$. Rephasing is $(-,+,+)$, non-rephasing $(+,-,+)$ and the fifth-order double-quantum signal of Example~3 $(-,-,+,+,+)$.
+
+The signal of a signature is the sum over \emph{all} pathways with that signature, and a set written by hand can miss some. A sequence that vanishes for a ground-state model without relaxation can be non-zero with relaxation or with a thermal reference state: for the open two-level system, $(B_u,K_u,K_u)$ is non-zero because the radiative channel moves population to $\ket{g}$ during $t_2$, and it refills the ground-state bleach. The function
+\begin{verbatim}
+pathways_from_signature(
+    signature,
+    *,
+    component="custom",
+    detection="polarization",
+    operator="light_matter",
+    max_manifold=None,
+    min_manifold=None,
+)
+\end{verbatim}
+returns the $2^n$ ordered label sequences of a signature, given as a sequence of $\pm1$ or as a string such as \texttt{"-++"}: each pulse with $s_j=+1$ acts as \texttt{Ku} or \texttt{Bd} and each pulse with $s_j=-1$ as \texttt{Kd} or \texttt{Bu}. The pathways are named after their labels (\texttt{"Bu-Ku-Bd"}) and carry \texttt{origin="enumerated"}. The sequences that the model does not allow vanish when the spectrum is computed, so the set is complete by construction. For the two-level system with relaxation, three of the eight rephasing sequences are non-zero, the pathways $R_1$, $R_2$ and $R_3$ of the manuscript; with a thermal state the other sequences, which start with a ket de-excitation, contribute as well.
+
+The arguments \texttt{max\_manifold} and \texttt{min\_manifold} apply the rule 4(a) of the UFSS diagram generator: the ket and bra manifold indices start at $0$ (\texttt{Ku}, \texttt{Bd} change them by $+1$ and $-1$ on the ket and bra respectively, \texttt{Kd} and \texttt{Bu} by the opposite signs) and a sequence is dropped when one leaves $[\texttt{min\_manifold},\texttt{max\_manifold}]$. With a ground-state reference and \texttt{max\_manifold=1} the rephasing set reduces to $R_1$ and $R_2$. The filter is valid only for a ground-state reference state without relaxation between manifolds; with relaxation or thermal populations leave both arguments at \texttt{None}.
+
+\subsubsection{Vanishing pathways}
+\label{sec:null-pathways}
+
+A pathway is null when its response vanishes on the whole grid (\texttt{max}$|S|\leq\texttt{tolerance}\times\max_p\max|S_p|$ with the default tolerance $10^{-14}$, the second maximum running over the pathways of the result). \texttt{SpectrumResult.null\_pathways(tolerance=1e-14)} returns their names and \texttt{result.diagnostics["null\_pathways"]} stores them. A pathway \emph{written by hand} that is null usually reveals a sequence that the transition blocks of the model do not allow or a final coherence order that the detection operator cannot read (a polarization needs $q=\pm1$), so \texttt{generate\_spectrum} emits a \texttt{NullPathwayWarning} for it; \texttt{warn\_null=False} silences the warning. Generated lists (\texttt{"enumerated"}, \texttt{"ufss"}) are not reported, since their zero members are expected, unless every pathway of the result is null.
 
 \subsubsection{UFSS diagram translation}
 
@@ -1247,7 +1276,7 @@ This translation preserves the UFSS coherence-order convention
 \end{equation}
 
 for the labels
-\(\{\texttt{Ku},\texttt{Kd},\texttt{Bu},\texttt{Bd}\}\), respectively.
+\(\{\texttt{Ku},\texttt{Kd},\texttt{Bu},\texttt{Bd}\}\), respectively. The translated pathways carry \texttt{origin="ufss"}. The UFSS generator removes the diagrams that leave the manifolds allowed by its \texttt{maximum\_manifold} (its rule 4(a)); when population transfer couples the manifolds, such diagrams can be non-zero, so \texttt{maximum\_manifold} must then be raised (the rephasing set of a two-level system with radiative relaxation needs \texttt{maximum\_manifold = 2}), or \texttt{pathways\_from\_signature} used instead.
 
 
 \subsection{\texttt{SpectroscopyPlotter}}

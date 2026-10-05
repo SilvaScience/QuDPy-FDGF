@@ -29,6 +29,7 @@ from .exceptions import (
     ConvergenceError,
     ModelConsistencyWarning,
     ModelContractError,
+    NullPathwayWarning,
     SectorError,
     SolverV10Error,
     StationarityError,
@@ -38,6 +39,8 @@ from .pathways import (
     FrequencyPathway,
     Interaction,
     coherence_orders_from_interactions,
+    pathway_signature,
+    pathways_from_signature,
     translate_ufss_diagrams,
 )
 from .protocols import (
@@ -73,6 +76,7 @@ __all__ = [
     "ModelRequirements",
     "ModelConsistencyWarning",
     "ModelContractError",
+    "NullPathwayWarning",
     "OperatorLike",
     "ObservableSpec",
     "PathwayResult",
@@ -92,6 +96,8 @@ __all__ = [
     "ThermodynamicContext",
     "coherence_orders_from_interactions",
     "decay_rates",
+    "pathway_signature",
+    "pathways_from_signature",
     "standard_nq_protocol",
     "translate_ufss_diagrams",
     "normalize_observables",

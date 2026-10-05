@@ -56,7 +56,7 @@ def test_window_changes_the_spectrum():
         solver = SpectroscopySolver(backend="dense", eta=0.02, check_stationarity="off")
         solver.feed_model(EigenbasisKModel(LADDER_H, LADDER_MU, transition_window=window))
         values[window] = solver.generate_spectrum(
-            PROTOCOL, {"omega": np.array([1.0])}, pathways=[LINEAR]).pathways["lin"][0]
+            PROTOCOL, {"omega": np.array([1.0])}, pathways=[LINEAR], warn_null=False).pathways["lin"][0]
     assert abs(values[None]) > 1.0
     assert values[(1.5, 3.0)] == 0                    # no transition left in the window
 

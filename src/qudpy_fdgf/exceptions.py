@@ -35,6 +35,14 @@ class ModelConsistencyWarning(UserWarning):
     """
 
 
+class NullPathwayWarning(UserWarning):
+    """Emitted when a pathway written by the user gives an identically zero response.
+
+    Typical causes: an interaction sequence that the transition blocks of the model do not
+    allow, or a final coherence order that the detection operator cannot read.
+    """
+
+
 class StationarityError(ModelContractError):
     """Raised when the reference state is not stationary and ``check_stationarity="error"``."""
 

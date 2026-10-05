@@ -37,6 +37,16 @@ class SpectrumResult:
     def shape(self):
         return tuple(len(axis) for axis in self.axis_values)
 
+    def null_pathways(self, tolerance=1e-14):
+        """Pathways whose response vanishes on the whole grid.
+
+        A pathway is null when ``max |S| <= tolerance * max_p max |S_p|``, the second maximum
+        running over the pathways of this result (any pathway of an all-zero result is null).
+        """
+        peaks = {name: float(abs(values).max()) for name, values in self.pathways.items()}
+        scale = max(peaks.values(), default=0.0)
+        return tuple(name for name, peak in peaks.items() if peak <= tolerance * scale)
+
 
 @dataclass
 class PlotResult:
