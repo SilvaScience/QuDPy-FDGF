@@ -223,6 +223,7 @@ EigenbasisKModel(
     j_plus_array=None,
     j_minus_array=None,
     rwa_tol=1e-6,
+    transition_window=None,
     k_weights=None,
     boltzmann_constant=8.617333262e-5,
 )
@@ -273,7 +274,10 @@ Matrix elements satisfying
 \begin{equation}
     |\Delta E_{ij}^{(k)}| \leq \text{rwa\_tol}
 \end{equation}
-are omitted from both components. Models requiring explicit manifold assignments, degeneracy handling, or external pathway conventions may instead provide both \texttt{j\_plus\_array} and \texttt{j\_minus\_array}. The reported decomposition is then \texttt{"automatic\_energy"} or \texttt{"explicit"}.
+are omitted from both components; this includes the static dipole moments and the elements between degenerate states. Models requiring explicit manifold assignments, degeneracy handling, or external pathway conventions may instead provide both \texttt{j\_plus\_array} and \texttt{j\_minus\_array}. The reported decomposition is then \texttt{"automatic\_energy"} or \texttt{"explicit"}.
+
+\paragraph{Bandwidth window and report.}
+In the impulsive limit every transition of positive energy is treated as resonant with the field, however small its Bohr frequency, which is wrong for a low-frequency transition (vibrational, or intra-manifold) of a model driven by an optical pulse. The argument \texttt{transition\_window=}$(\omega_{\min},\omega_{\max})$ keeps only the elements with $\omega_{\min}\leq|\Delta E_{ij}|\leq\omega_{\max}$, in the units of the Hamiltonian: the band that the pulses of the experiment can drive. It requires $0\leq\omega_{\min}<\omega_{\max}$ and cannot be combined with explicit \texttt{j\_plus\_array} and \texttt{j\_minus\_array}. The method \texttt{transition\_summary()} returns a dictionary with the fractions of $\sum_{ij}|\mu_{ij}|^2$ that are kept (\texttt{kept\_fraction}), static (\texttt{static\_fraction}: diagonal elements of non-degenerate states), inside degenerate subspaces (\texttt{degenerate\_fraction}) and excluded by the window (\texttt{outside\_window\_fraction}), together with \texttt{n\_degenerate\_states}; the degenerate weight is the Frobenius weight of the zero-frequency blocks, which does not depend on the basis chosen inside a degenerate subspace. If the degenerate weight exceeds $10^{-6}$ of the total, the constructor emits a \texttt{ModelConsistencyWarning}: the field does not couple these states, and the explicit arrays must be used if it should. \texttt{ExcitationSectorModel.transition\_summary()} reports \texttt{"explicit\_sector"}.
 
 \subsubsection{Detection and named observables}
 
@@ -973,7 +977,7 @@ The method \texttt{summary()} returns a serializable description of the construc
     \item the total Hilbert-space dimension;
     \item the stationarity residual of the reference state;
     \item the active pathway metadata;
-    \item the transition-operator decomposition when it is advertised by the
+    \item the transition-operator decomposition and its \texttt{transition\_summary()} when they are advertised by the
     model.
 \end{itemize}
 This method is intended for inspection, reproducibility records, and debugging of backend or pathway configuration. 

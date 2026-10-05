@@ -637,6 +637,9 @@ class SpectroscopySolver:
             decomposition = decomposition()
         if decomposition is not None:
             summary["transition_decomposition"] = str(decomposition)
+        transition_summary = getattr(self.model, "transition_summary", None)
+        if callable(transition_summary):
+            summary["transition_summary"] = transition_summary()
         return summary
 
     def solve_hilbert_resolvent(self, vector, omega, **kwargs):

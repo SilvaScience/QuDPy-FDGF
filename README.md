@@ -101,7 +101,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `53 passed` in about 17 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `76 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -401,8 +401,20 @@ model = EigenbasisKModel(
 ```
 
 Both explicit arrays must be supplied together and may have shape `(d, d)` or
-`(N_k, d, d)`. Without these arguments, the current separation based on the
-sign of `Delta_E` and `rwa_tol` remains unchanged.
+`(N_k, d, d)`. Without these arguments, the interaction operator is split by the sign of the
+Bohr frequency `Delta_E`; elements with `|Delta_E| <= rwa_tol` (static dipoles, degenerate pairs)
+belong to neither part. Two additions make this split visible and controllable:
+
+```python
+model = EigenbasisKModel(H, mu, transition_window=(0.5, 3.0))   # keep 0.5 <= |Delta_E| <= 3.0
+model.transition_summary()   # kept / static / degenerate / outside-window fractions of sum |mu_ij|^2
+```
+
+`transition_window` is the band of Bohr frequencies that the impulsive pulses can drive (in the
+units of `H`); without it, any transition of positive energy, however small, is treated as
+resonant with the field. A `ModelConsistencyWarning` is emitted when elements that couple
+degenerate states (more than 1e-6 of the weight) are excluded by `rwa_tol`. `solver.summary()`
+includes the same report.
 
 ## Plotter V10
 

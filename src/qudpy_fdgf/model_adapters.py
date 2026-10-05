@@ -10,6 +10,7 @@ solver or numerical backends.
 from __future__ import annotations
 
 from collections.abc import Mapping
+import warnings
 
 import numpy as np
 
@@ -20,6 +21,7 @@ from .contracts import (
     PureState,
 )
 from .capabilities import ModelRequirements
+from .exceptions import ModelConsistencyWarning
 
 
 _BOLTZMANN_EV_PER_KELVIN = 8.617333262e-5
@@ -340,6 +342,10 @@ class ExcitationSectorModel:
     def transition_decomposition(self):
         return "explicit_sector"
 
+    def transition_summary(self):
+        """The raising blocks are supplied explicitly; nothing is filtered."""
+        return {"decomposition": "explicit_sector"}
+
     def initial_condition(self, context=None):
         vector = np.zeros(
             self.dimension(self._initial_sector), dtype=np.complex128
@@ -417,6 +423,13 @@ class EigenbasisKModel:
     Optional arrays override transition splitting and k-point weights.
     ``boltzmann_constant`` must use the same energy unit as ``H_model``; its
     default value is in eV/K.
+
+    Without ``j_plus_array`` and ``j_minus_array`` the interaction operator is split by the sign
+    of the Bohr frequency ``E_i - E_j``. Elements with ``|E_i - E_j| <= rwa_tol`` (static dipoles
+    and degenerate pairs) belong to neither part. ``transition_window=(w_min, w_max)`` keeps only
+    the elements whose Bohr frequency satisfies ``w_min <= |E_i - E_j| <= w_max``, in the units of
+    the Hamiltonian: the band that the impulsive pulses of the experiment can drive.
+    ``transition_summary()`` reports what was kept and what was excluded.
     """
 
     def __init__(
@@ -430,6 +443,7 @@ class EigenbasisKModel:
         j_plus_array=None,
         j_minus_array=None,
         rwa_tol=1e-6,
+        transition_window=None,
         k_weights=None,
         boltzmann_constant=_BOLTZMANN_EV_PER_KELVIN,
     ):
@@ -454,6 +468,29 @@ class EigenbasisKModel:
             raise ValueError(
                 "j_plus_array and j_minus_array must be provided together."
             )
+        self._window = None
+        if transition_window is not None:
+            if explicit_plus:
+                raise ValueError(
+                    "transition_window applies to the automatic decomposition "
+                    "only; it cannot be combined with j_plus_array/j_minus_array."
+                )
+            try:
+                low, high = (float(value) for value in transition_window)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "transition_window must be a pair (w_min, w_max)."
+                ) from exc
+            if not 0.0 <= low < high:
+                raise ValueError("transition_window requires 0 <= w_min < w_max.")
+            self._window = (low, high)
+        self._filter_stats = {
+            "total_weight": 0.0,
+            "static_weight": 0.0,
+            "degenerate_weight": 0.0,
+            "outside_window_weight": 0.0,
+            "n_degenerate_states": 0,
+        }
 
         if explicit_plus:
             j_plus_stack = _as_k_stack(
@@ -542,13 +579,10 @@ class EigenbasisKModel:
                 )
             else:
                 interaction_eigen = U.conj().T @ interaction_stack[index] @ U
-                delta_E = evals[:, np.newaxis] - evals[np.newaxis, :]
-                self._J_plus[sector] = np.where(
-                    delta_E > self._rwa_tol, interaction_eigen, 0.0
-                )
-                self._J_minus[sector] = np.where(
-                    delta_E < -self._rwa_tol, interaction_eigen, 0.0
-                )
+                (
+                    self._J_plus[sector],
+                    self._J_minus[sector],
+                ) = self._split_by_bohr_frequency(interaction_eigen, evals)
             self._detection[sector] = U.conj().T @ detection_stack[index] @ U
             for name, stack in self._observable_arrays.items():
                 self._observables[name][sector] = (
@@ -556,6 +590,72 @@ class EigenbasisKModel:
                 )
 
         self._channels = self._build_channels(c_ops_raw, H_stack)
+        if not explicit_plus:
+            self._warn_about_excluded_transitions()
+
+    def _split_by_bohr_frequency(self, interaction_eigen, energies):
+        """Interaction operator in the eigenbasis -> (J_plus, J_minus), with bookkeeping."""
+        delta_E = energies[:, np.newaxis] - energies[np.newaxis, :]
+        magnitude = np.abs(delta_E)
+        allowed = magnitude > self._rwa_tol
+        if self._window is not None:
+            low, high = self._window
+            in_window = (magnitude >= low) & (magnitude <= high)
+        else:
+            in_window = np.ones_like(allowed)
+        keep = allowed & in_window
+
+        # Zero-frequency elements: those of states with a degenerate partner form blocks whose
+        # Frobenius weight does not depend on the basis chosen inside the degenerate subspace;
+        # the diagonal elements of the other states are static dipole moments.
+        weight = np.abs(interaction_eigen) ** 2
+        has_partner = np.count_nonzero(~allowed, axis=1) > 1
+        degenerate = ~allowed & has_partner[:, np.newaxis] & has_partner[np.newaxis, :]
+        static = ~allowed & ~degenerate
+        stats = self._filter_stats
+        stats["total_weight"] += float(weight.sum())
+        stats["static_weight"] += float(weight[static].sum())
+        stats["degenerate_weight"] += float(weight[degenerate].sum())
+        stats["outside_window_weight"] += float(weight[allowed & ~in_window].sum())
+        stats["n_degenerate_states"] += int(np.count_nonzero(has_partner))
+        return (
+            np.where(keep & (delta_E > 0), interaction_eigen, 0.0),
+            np.where(keep & (delta_E < 0), interaction_eigen, 0.0),
+        )
+
+    def _warn_about_excluded_transitions(self):
+        stats = self._filter_stats
+        fraction = stats["degenerate_weight"] / max(stats["total_weight"], np.finfo(float).tiny)
+        if fraction <= 1e-6:
+            return
+        warnings.warn(
+            f"The interaction operator couples states closer than rwa_tol = {self._rwa_tol:g} "
+            f"(degenerate subspaces; {stats['n_degenerate_states']} states, {fraction:.1%} of its "
+            "weight). These elements are excluded from both J_plus and J_minus, so the field does "
+            "not couple them. If it should, supply j_plus_array and j_minus_array explicitly.",
+            ModelConsistencyWarning,
+            stacklevel=3,
+        )
+
+    def transition_summary(self):
+        """What the automatic decomposition kept and excluded (fractions of ``sum |mu_ij|^2``)."""
+        if self._transition_decomposition == "explicit":
+            return {"decomposition": "explicit"}
+        stats = self._filter_stats
+        total = max(stats["total_weight"], np.finfo(float).tiny)
+        excluded = (
+            stats["static_weight"] + stats["degenerate_weight"] + stats["outside_window_weight"]
+        )
+        return {
+            "decomposition": "automatic_energy",
+            "rwa_tol": self._rwa_tol,
+            "transition_window": self._window,
+            "kept_fraction": 1.0 - excluded / total,
+            "static_fraction": stats["static_weight"] / total,
+            "degenerate_fraction": stats["degenerate_weight"] / total,
+            "outside_window_fraction": stats["outside_window_weight"] / total,
+            "n_degenerate_states": stats["n_degenerate_states"],
+        }
 
     def _build_channels(self, c_ops_raw, H_stack):
         channels = []
