@@ -33,6 +33,7 @@ class SparseSectorBackend(BackendBase):
     preconditioners = (None, "diagonal")
 
     name = "sparse_sector"
+    supports_factorized = True
     capabilities = Capabilities(
         pure_state=True,
         mixed_state=True,
@@ -105,7 +106,25 @@ class SparseSectorBackend(BackendBase):
         self._initial_density_vector = self._initial_density_matrix.reshape(
             -1, order="F"
         )
+        self._liouville_adjoint = LinearOperator(
+            self._liouville.shape,
+            dtype=np.complex128,
+            matvec=self._liouville.rmatvec,
+            rmatvec=self._liouville.matvec,
+        )
         return self
+
+    def factorized_applicable(self, protocol):
+        """Frequency axes, a dissipative generator or a mixed state take the Liouville route.
+
+        A closed model with a pure state and time intervals only is evaluated as a rank-one dyad,
+        which is cheaper than any Liouville vector; the factorized evaluation does not apply.
+        """
+        return bool(
+            protocol.frequency_axis_names
+            or not self.generator.is_unitary
+            or not self._initial_is_pure
+        )
 
     @staticmethod
     def _diagonal_preconditioner(shifted_diagonal):
@@ -178,16 +197,18 @@ class SparseSectorBackend(BackendBase):
             ),
             dtype=np.complex128,
         )
+        self._counters["propagations"] += 1
         self._liouville_time_cache[key] = propagated.copy()
         self._liouville_time_cache.move_to_end(key)
         while len(self._liouville_time_cache) > self.max_cache_entries:
             self._liouville_time_cache.popitem(last=False)
         return propagated
 
-    def _solve_liouville_resolvent(self, density_vector, omega, eta):
+    def _solve_liouville_resolvent(self, density_vector, omega, eta, *, adjoint=False):
+        """Vector and frequency -> GMRES solution of the shifted system (or of its adjoint)."""
         shift = self.generator.frequency_shift(omega, eta)
         dimension = self.layout.total_dimension**2
-        operator = LinearOperator(
+        forward = LinearOperator(
             (dimension, dimension),
             dtype=np.complex128,
             matvec=lambda value: shift * value
@@ -195,12 +216,16 @@ class SparseSectorBackend(BackendBase):
             rmatvec=lambda value: np.conj(shift) * value
             - self._liouville.rmatvec(value),
         )
-        preconditioner = (
+        operator = forward.H if adjoint else forward
+        diagonal = (
             None
             if self._liouville_diagonal is None
-            else self._diagonal_preconditioner(
-                shift - self._liouville_diagonal
-            )
+            else shift - self._liouville_diagonal
+        )
+        if adjoint and diagonal is not None:
+            diagonal = np.conj(diagonal)
+        preconditioner = (
+            None if diagonal is None else self._diagonal_preconditioner(diagonal)
         )
         raw_solution, info = gmres(
             operator,
@@ -219,8 +244,39 @@ class SparseSectorBackend(BackendBase):
                 "Liouville GMRES resolvent did not converge "
                 f"(info={info}, residual={residual:.3e})."
             )
-        solution = self.generator.frequency_prefactor * raw_solution
+        self._counters["resolvent_solves"] += 1
+        self._max_residual = max(self._max_residual, residual)
+        prefactor = self.generator.frequency_prefactor
+        solution = (np.conj(prefactor) if adjoint else prefactor) * raw_solution
         return np.asarray(solution, dtype=np.complex128), residual
+
+    def _propagate_liouville_block(self, states, delay, adjoint):
+        """Vectors and delay -> ``exp(L t)`` (or its adjoint) applied to each column at once."""
+        delay = float(delay)
+        if delay == 0:
+            return states.copy()
+        generator = self._liouville_adjoint if adjoint else self._liouville
+        propagated = np.asarray(
+            expm_multiply(delay * generator, states, traceA=0.0),
+            dtype=np.complex128,
+        )
+        self._counters["propagations"] += states.shape[1]
+        return propagated
+
+    def interval_block(self, states, domain, values, eta=None, *, adjoint=False):
+        """Liouville vectors -> propagator or resolvent (or adjoint) at several coordinates."""
+        states = np.asarray(states, dtype=np.complex128)
+        eta = self.eta if eta is None else float(eta)
+        out = np.empty((states.shape[0], states.shape[1], len(values)), dtype=np.complex128)
+        for index, value in enumerate(values):
+            if domain == "time":
+                out[:, :, index] = self._propagate_liouville_block(states, value, adjoint)
+            else:
+                for column in range(states.shape[1]):
+                    out[:, column, index], _ = self._solve_liouville_resolvent(
+                        states[:, column], value, eta, adjoint=adjoint
+                    )
+        return out
 
     def _detect_density(self, density_vector, observable):
         observable_rho = self.apply_detection_operator_matrix(
@@ -320,13 +376,9 @@ class SparseSectorBackend(BackendBase):
 
     def _detector_vector(self, detector):
         """Detector -> vec(M^dagger), so that Tr(M rho) = <<M^dagger|rho>>."""
-        dimension = self.layout.total_dimension
-        matrix = np.empty((dimension, dimension), dtype=np.complex128)
-        basis = np.zeros(dimension, dtype=np.complex128)
-        for index in range(dimension):
-            basis[index] = 1.0
-            matrix[:, index] = self.apply_detection_operator(basis, detector)
-            basis[index] = 0.0
+        matrix = self.apply_detection_operator_matrix(
+            np.eye(self.layout.total_dimension, dtype=np.complex128), detector
+        )
         return matrix.conj().T.reshape(-1, order="F")
 
     def _integrated_detector(self, spec):

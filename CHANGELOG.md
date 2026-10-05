@@ -6,6 +6,18 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 ## Unreleased
 
 ### Changed
+- `generate_spectrum` (and `generate_nq_spectrum`) evaluate a grid with `strategy="auto"` by
+  default: when at least two axes are scanned and the factorized evaluation needs fewer solves, each
+  pathway is cut between two scanned intervals, the two parts are evaluated once per point of their
+  own axes and contracted by a matrix product (`factorized.py`). The numbers are those of the
+  pointwise evaluation up to the accuracy of the linear solves (about 1e-10 for the default GMRES
+  tolerance, 1e-15 for the dense backend; the regression snapshots are reproduced to 1e-9); use
+  `strategy="pointwise"` for the former evaluation. Measured on the Example 2 model, rephasing
+  GSB + SE + ESA, sparse backend, one BLAS thread: 5 x 5 points at D = 57 take 150 -> 10 GMRES solves
+  and 27 -> 2.9 s; 3 x 3 points at D = 163 take 54 -> 6 solves and 99 -> 17 s. Example 1 on 21 x 21
+  points takes 2646 -> 42 solves. Example 3 on its 151 x 151 grid (seven pathways) takes 302 solves
+  instead of about 319 000 (0.04 s dense, 6 s sparse).
+- `SparseSectorBackend._detector_vector` no longer loops over the basis vectors.
 - The Liouvillian and the sector operators act on the whole density matrix with matrix products
   instead of one Python call per column (`generators.py`, `backends/base.py`, `sparse_sector.py`,
   `dense_liouville.py`). One application of `L` costs `2 + 5 n_c` block-by-matrix products for `n_c`
@@ -27,6 +39,17 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 - `generators.operator_matmat` and `operator_rmatmat` apply an operator to a matrix.
 
 ### Added
+- `generate_spectrum(..., strategy="auto"|"factorized"|"pointwise", memory_limit_mb=1024.0)`.
+  `result.diagnostics` reports `strategy`, `resolvent_solves`, `resolvent_factorizations` (dense
+  backend), `propagations`, `maximum_resolvent_residual` (sparse backend) and, for the factorized
+  evaluation, `factorization` (cut, axes of each side, vectors stored, slabs).
+- Backend primitives of the adjoint chain: `interaction_block`, `interval_block` (propagator or
+  resolvent, forward or adjoint, at several coordinates), `detector_vector`,
+  `apply_transition_adjoint_matrix`, `liouville_initial_vector`, `factorized_applicable`;
+  `reset_counters()` and `counters()`.
+- `tests/api/test_factorized_strategy.py`: equality of the two evaluations (both backends, all kinds
+  of observable, one to three axes, thermal and dissipative models, fifth order), solve counts,
+  slabs, fall-backs.
 - Pathway signatures and completeness: `Interaction.sign`, `FrequencyPathway.signature`,
   `pathway_signature()`, `pathways_from_signature(signature, component=, max_manifold=,
   min_manifold=)` which enumerates the `2**n` sequences with a given wave-vector signature.

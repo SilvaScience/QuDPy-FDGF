@@ -51,9 +51,9 @@ def _arrays(result):
 
 # --------------------------------------------------------------------------------------- two-level
 
-def _two_level(backend):
-    options = TIGHT if backend == "sparse_sector" else {}
-    solver = SpectroscopySolver(backend=backend, eta=0.002, **options)
+def _two_level(backend, **options):
+    solver_options = TIGHT if backend == "sparse_sector" else {}
+    solver = SpectroscopySolver(backend=backend, eta=0.002, **solver_options)
     solver.feed_model(EigenbasisKModel(
         H, MU, c_ops_raw=((L_RAD, GAMMA_1), (SIGMA_Z, GAMMA_PHI / 2)),
         observable_op_arrays={"polarization": MU, "excited_population": P_E}))
@@ -72,29 +72,29 @@ def _two_level(backend):
     }
     axes = {"w1": np.linspace(-2.1, -1.9, 5), "w3": np.linspace(1.9, 2.1, 5)}
     return _arrays(solver.generate_spectrum(PROTOCOL, axes, fixed_coordinates={"t2": 10.0},
-                                            pathways=pathways, observables=observables))
+                                            pathways=pathways, observables=observables, **options))
 
 
 # ------------------------------------------------------------------------------ three-site chain
 CHAIN_AXES = {"w1": np.linspace(-2.1, -1.9, 3), "w3": np.linspace(1.9, 2.1, 3)}
 
 
-def _chain_dissipative(backend):
-    options = TIGHT if backend == "sparse_sector" else {}
-    solver = SpectroscopySolver(backend=backend, eta=0.01, **options)
+def _chain_dissipative(backend, **options):
+    solver_options = TIGHT if backend == "sparse_sector" else {}
+    solver = SpectroscopySolver(backend=backend, eta=0.01, **solver_options)
     solver.feed_model(three_site_chain(dissipative=True))
     return _arrays(solver.generate_spectrum(PROTOCOL, CHAIN_AXES, fixed_coordinates={"t2": 20.0},
-                                            pathways=REPHASING))
+                                            pathways=REPHASING, **options))
 
 
-def _chain_thermal_diagonal():
+def _chain_thermal_diagonal(**options):
     solver = SpectroscopySolver(backend="sparse_sector", eta=0.01, preconditioner="diagonal", **TIGHT)
     solver.feed_model(three_site_chain(dissipative=False), context=ThermodynamicContext(temperature=600.0))
     return _arrays(solver.generate_spectrum(PROTOCOL, CHAIN_AXES, fixed_coordinates={"t2": 0.0},
-                                            pathways=REPHASING))
+                                            pathways=REPHASING, **options))
 
 
-def _time_only(backend):
+def _time_only(backend, **options):
     """Closed model, pure state, time-domain intervals only: rank-one dyad route of the sparse backend."""
     solver = SpectroscopySolver(backend=backend, eta=0.01, **(TIGHT if backend == "sparse_sector" else {}))
     solver.feed_model(three_site_chain(dissipative=False))
@@ -105,11 +105,11 @@ def _time_only(backend):
     ))
     axes = {"t1": np.array([0.0, 5.0, 10.0]), "t3": np.array([0.0, 5.0, 10.0])}
     return _arrays(solver.generate_spectrum(protocol, axes, fixed_coordinates={"t2": 2.0},
-                                            pathways=REPHASING))
+                                            pathways=REPHASING, **options))
 
 
 # ----------------------------------------------------------------------- two-mode bosons, order 5
-def _bosons_chi5(backend="dense"):
+def _bosons_chi5(backend="dense", **options):
     levels, n_max = 4, 3
     destroy = np.diag(np.sqrt(np.arange(1, levels)), 1).astype(complex)
     eye = np.eye(levels, dtype=complex)
@@ -138,7 +138,7 @@ def _bosons_chi5(backend="dense"):
     solver.feed_model(model)
     axes = {"w2q": np.linspace(-3.20, -3.00, 3), "w5": np.linspace(1.45, 1.57, 3)}
     fixed = {"t1": 2.0, "t3": 2.0, "t4": 2.0}
-    return _arrays(solver.generate_spectrum(protocol, axes, fixed_coordinates=fixed, pathways=pathways))
+    return _arrays(solver.generate_spectrum(protocol, axes, fixed_coordinates=fixed, pathways=pathways, **options))
 
 
 CASES = {

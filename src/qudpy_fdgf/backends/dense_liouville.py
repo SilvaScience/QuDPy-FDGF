@@ -21,6 +21,7 @@ class DenseLiouvilleBackend(BackendBase):
     """Exact backend that materializes the full Liouville space."""
 
     name = "dense_liouville"
+    supports_factorized = True
     capabilities = Capabilities(
         pure_state=True,
         mixed_state=True,
@@ -98,6 +99,7 @@ class DenseLiouvilleBackend(BackendBase):
         shift = self.generator.frequency_shift(omega, eta)
         matrix = shift * self._I_liouville - self._A_dense
         inverse = self.generator.frequency_prefactor * np.linalg.inv(matrix)
+        self._counters["resolvent_factorizations"] += 1
         if self.cache_resolvents:
             self._bounded_cache_put(self._resolvent_cache, key, inverse)
         return inverse
@@ -111,6 +113,46 @@ class DenseLiouvilleBackend(BackendBase):
         propagator = expm(self._A_dense * float(delay))
         self._bounded_cache_put(self._time_cache, key, propagator)
         return propagator
+
+    def _resolvent_block(self, states, omega, eta, adjoint):
+        """Vectors and frequency -> resolvent (or its adjoint) applied to each column.
+
+        A resolvent already in the cache is applied as a matrix product; otherwise the shifted
+        matrix is factorized once and solved for all the columns, without storing its inverse.
+        """
+        key = (round(float(omega), 14), round(float(eta), 14))
+        cached = self._resolvent_cache.get(key)
+        prefactor = self.generator.frequency_prefactor
+        if cached is not None:
+            self._resolvent_cache.move_to_end(key)
+            result = (
+                np.conj(cached.T @ states.conj()) if adjoint else cached @ states
+            )
+        else:
+            shift = self.generator.frequency_shift(omega, eta)
+            matrix = shift * self._I_liouville - self._A_dense
+            if adjoint:
+                matrix = matrix.conj().T
+            result = prefactor * np.linalg.solve(matrix, states)
+            self._counters["resolvent_factorizations"] += 1
+        self._counters["resolvent_solves"] += states.shape[1]
+        return result
+
+    def interval_block(self, states, domain, values, eta=None, *, adjoint=False):
+        """Liouville vectors -> propagator or resolvent (or adjoint) at several coordinates."""
+        states = np.asarray(states, dtype=np.complex128)
+        eta = self.eta if eta is None else float(eta)
+        out = np.empty((states.shape[0], states.shape[1], len(values)), dtype=np.complex128)
+        for index, value in enumerate(values):
+            if domain == "time":
+                propagator = self._time_propagator(value)
+                out[:, :, index] = (
+                    np.conj(propagator.T @ states.conj()) if adjoint else propagator @ states
+                )
+                self._counters["propagations"] += states.shape[1]
+            else:
+                out[:, :, index] = self._resolvent_block(states, value, eta, adjoint)
+        return out
 
     def solve_hilbert_resolvent(self, vector, omega, *, eta=None, **_):
         """Vector and frequency -> exact dense Hilbert resolvent."""
@@ -198,11 +240,13 @@ class DenseLiouvilleBackend(BackendBase):
                 response = self._time_propagator(
                     coordinates[interval.name]
                 ) @ response
+                self._counters["propagations"] += 1
             elif interval.domain == "frequency":
                 eta = self.eta if interval.eta is None else interval.eta
                 response = self._resolvent(
                     coordinates[interval.name], eta
                 ) @ response
+                self._counters["resolvent_solves"] += 1
 
         return response
 

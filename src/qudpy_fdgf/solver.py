@@ -20,6 +20,7 @@ from .backends import (
 )
 from .capabilities import Capabilities, ModelRequirements
 from .diagnostics import decay_rates
+from .factorized import evaluate_factorized, pathway_operations, plan_factorization
 from .exceptions import (
     CapabilityError,
     NullPathwayWarning,
@@ -375,13 +376,26 @@ class SpectroscopySolver:
         pathways=None,
         observables=None,
         warn_null=True,
+        strategy="auto",
+        memory_limit_mb=1024.0,
     ):
         """Protocol and coordinate grid -> multidimensional responses.
 
-        Additional observables reuse each pathway propagation. ``result.diagnostics["null_pathways"]``
-        lists the pathways that vanish on the whole grid; with ``warn_null`` a pathway written by
-        hand that does is reported by a ``NullPathwayWarning`` (generated lists are not), and so
-        is a result in which every pathway vanishes.
+        ``result.diagnostics["null_pathways"]`` lists the pathways that vanish on the whole grid;
+        with ``warn_null`` a pathway written by hand that does is reported by a
+        ``NullPathwayWarning`` (generated lists are not), and so is a result in which every
+        pathway vanishes.
+
+        ``strategy`` selects how the grid is evaluated. ``"pointwise"`` propagates every pathway
+        at every grid point (additional observables reuse that propagation). ``"factorized"`` cuts
+        each pathway between two scanned intervals and evaluates the two parts once per point of
+        their own axes, which needs about ``N1 + N2`` instead of ``N1 * N2`` solves for two axes
+        of ``N1`` and ``N2`` points, and contracts them with a matrix product; it needs at least
+        two scanned axes and stores up to ``memory_limit_mb`` of Liouville vectors, the grid
+        being processed in slabs beyond that. ``"auto"`` (default) takes the factorized
+        evaluation when it applies, is cheaper and fits in the memory limit.
+        ``result.diagnostics`` reports the strategy and the work done (``resolvent_solves``,
+        ``propagations``).
         """
         self._require_ready()
         if not isinstance(protocol, SpectroscopyProtocol):
@@ -427,8 +441,42 @@ class SpectroscopySolver:
             for spec in observable_specs
         }
         self.backend.clear_caches()
+        chosen, plan = self._choose_strategy(
+            strategy,
+            protocol,
+            normalized_axes,
+            fixed_coordinates,
+            selected,
+            len(observable_specs),
+            memory_limit_mb,
+        )
+        reset = getattr(self.backend, "reset_counters", None)
+        if reset is not None:
+            reset()
+        evaluation = {"strategy": chosen}
 
-        for grid_index in np.ndindex(shape):
+        if chosen == "factorized":
+            computed = evaluate_factorized(
+                self.backend,
+                protocol,
+                axis_names,
+                axis_values,
+                fixed_coordinates,
+                selected,
+                observable_specs,
+                plan,
+                memory_limit_bytes=(
+                    None if memory_limit_mb is None else float(memory_limit_mb) * 2**20
+                ),
+            )
+            pathway_values = computed.pathway_values
+            observable_values = computed.observable_values
+            evaluation["factorization"] = computed.info
+            grid_points = ()
+        else:
+            grid_points = np.ndindex(shape)
+
+        for grid_index in grid_points:
             coordinates = dict(fixed_coordinates)
             coordinates.update(
                 {
@@ -450,6 +498,10 @@ class SpectroscopySolver:
                     observable_values[name][pathway.name][grid_index] = value
                 if result.diagnostics:
                     diagnostics[pathway.name][grid_index] = result.diagnostics
+
+        counters = getattr(self.backend, "counters", None)
+        if counters is not None:
+            evaluation.update(counters())
 
         components = {}
         for pathway in selected:
@@ -485,6 +537,7 @@ class SpectroscopySolver:
                 "backend": self.backend.name,
                 "pathways": diagnostics,
                 "observables": tuple(spec.name for spec in observable_specs),
+                **evaluation,
             },
             observables=observable_values,
             observable_components=observable_components,
@@ -509,6 +562,61 @@ class SpectroscopySolver:
                 )
         return result
 
+    def _choose_strategy(
+        self,
+        strategy,
+        protocol,
+        axes,
+        fixed_coordinates,
+        selected,
+        n_observables,
+        memory_limit_mb,
+    ):
+        """Requested strategy -> ("pointwise" | "factorized", plan)."""
+        strategy = str(strategy).lower()
+        if strategy not in {"auto", "pointwise", "factorized"}:
+            raise ValueError(
+                "strategy must be 'auto', 'pointwise' or 'factorized'; "
+                f"got {strategy!r}."
+            )
+        if strategy == "pointwise":
+            return "pointwise", None
+        reason = None
+        plan = None
+        applicable = getattr(self.backend, "factorized_applicable", None)
+        if applicable is None or not applicable(protocol):
+            reason = (
+                f"Backend {self.backend.name!r} has no factorized evaluation for this protocol "
+                "(a closed model with a pure state and time intervals only is evaluated as a "
+                "rank-one dyad, which is cheaper)."
+            )
+        else:
+            operations = pathway_operations(
+                self.backend, selected[0], protocol, set(axes), fixed_coordinates
+            )
+            sizes = {name: len(values) for name, values in axes.items()}
+            plan = plan_factorization(operations, sizes, n_observables)
+            if plan is None:
+                reason = (
+                    "The factorized evaluation needs at least two scanned axes; "
+                    f"got {len(axes)}."
+                )
+        if strategy == "factorized":
+            if plan is None:
+                raise ValueError(reason)
+            return "factorized", plan
+        if plan is None or plan.solves >= plan.pointwise_solves:
+            return "pointwise", None
+        if memory_limit_mb is not None:
+            minimum = (
+                (min(plan.left_points, plan.right_points) + 1)
+                * self.backend.layout.total_dimension ** 2
+                * 16
+            )
+            if minimum > float(memory_limit_mb) * 2**20:
+                return "pointwise", None
+        return "factorized", plan
+
     def generate_nq_spectrum(
         self,
         order,
@@ -519,6 +627,8 @@ class SpectroscopySolver:
         pathways=None,
         observables=None,
         warn_null=True,
+        strategy="auto",
+        memory_limit_mb=1024.0,
     ):
         """NQ protocol and grid -> separate ``+NQ`` and ``-NQ`` responses."""
         order = abs(int(order))
@@ -554,6 +664,8 @@ class SpectroscopySolver:
             pathways=selected,
             observables=observables,
             warn_null=warn_null,
+            strategy=strategy,
+            memory_limit_mb=memory_limit_mb,
         )
         shape = result.shape
         components = dict(result.components)

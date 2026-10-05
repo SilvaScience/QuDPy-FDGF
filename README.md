@@ -48,6 +48,7 @@ src/qudpy_fdgf/          the package (generic engine, no physical model)
     protocols.py         PropagationInterval, SpectroscopyProtocol, standard_nq_protocol
     observables.py       ObservableSpec: polarization, action detection, jump counts
     generators.py        matrix-free Liouville generator actions
+    factorized.py        factorized evaluation of a grid (cut of the pathway chain, shared prefixes)
     backends/            DenseLiouvilleBackend (reference), SparseSectorBackend (matrix-free)
     diagnostics.py       DecayRates (rates implied by the declared collapse channels)
     results.py           SpectrumResult, PathwayResult, PlotResult
@@ -101,7 +102,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `110 passed` in about 10 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `138 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -419,6 +420,42 @@ resonant with the field. A `ModelConsistencyWarning` is emitted when elements th
 degenerate states (more than 1e-6 of the weight) are excluded by `rwa_tol`. `solver.summary()`
 includes the same report.
 
+## Evaluating a grid: pointwise or factorized
+
+A pathway response is a chain of interaction superoperators, time propagators and resolvents ending
+in a detection vector. When the coordinates of two or more intervals are scanned, `generate_spectrum`
+does not repeat the same solves at every grid point. With `strategy="factorized"` it cuts each
+pathway between two scanned intervals, evaluates the forward part once per point of its own axes
+and the adjoint part (resolvents and propagators applied as adjoints to the detection vector) once
+per point of the others, and contracts them with a matrix product. For two axes of `N` points this
+takes about `2N` shifted solves per observable instead of `2N^2` per pathway. Pathways that begin
+the same way (the three rephasing pathways of a two-level system share their first interaction and
+their first resolvent) share the common part, and the observables share the forward part.
+
+```python
+result = solver.generate_spectrum(protocol, axes, pathways=pathways)            # strategy="auto"
+result.diagnostics["strategy"]            # "factorized"
+result.diagnostics["resolvent_solves"]    # linear solves done (GMRES runs, or dense solves)
+result.diagnostics["propagations"]        # time propagators applied to a vector, cache hits excluded
+result.diagnostics["factorization"]       # cut, axes of each side, vectors stored, number of slabs
+
+solver.generate_spectrum(protocol, axes, pathways=pathways, strategy="pointwise")   # one propagation per point
+```
+
+- `"auto"` (default): factorized when at least two axes are scanned, when it needs fewer solves
+  than the pointwise evaluation and when the stored Liouville vectors fit in `memory_limit_mb`
+  (default 1024); otherwise pointwise.
+- `"factorized"`: always, or `ValueError` when it does not apply (fewer than two scanned axes; a
+  closed model with a pure state and time intervals only on `SparseSectorBackend`, which is
+  evaluated as a rank-one dyad and is cheaper that way).
+- `"pointwise"`: the former evaluation, kept for validation. Both strategies give the same numbers
+  up to the accuracy of the linear solves (about `1e-10` of the largest value for the default GMRES
+  tolerance, `1e-15` for the dense backend).
+- Memory: the factorized evaluation keeps the vectors of the smaller side for the whole grid
+  and streams the other side in slabs of its first axis so that the vectors in memory stay below
+  `memory_limit_mb`; the solves are the same, only the memory changes. `generate_nq_spectrum` takes
+  the same two arguments.
+
 ## Plotter V10
 
 The plotter is separate from the computation and accepts a configuration
@@ -515,6 +552,7 @@ solver.feed_model(model)
 - rank-one ket/bra branches;
 - matrix-free Hilbert-space resolvent solved with GMRES;
 - exact frequency-domain pathways through matrix-free Liouville action;
+- factorized evaluation of grids (adjoint resolvents, propagators and interactions, shared prefixes);
 - optional diagonal preconditioner for the GMRES solves (`preconditioner="diagonal"`): exact, hence
   one iteration per solve, for a closed model in its eigenbasis; only approximate with collapse
   channels that couple coherences;
@@ -532,7 +570,9 @@ algorithm or a more specialized wave-function formulation.
 - pure or mixed states;
 - unitary or Lindblad dynamics;
 - time- and frequency-domain intervals;
-- useful for validating the sectorized backend.
+- useful for validating the sectorized backend;
+- factorized evaluation of grids: one factorization per scanned frequency for all the vectors
+  (`resolvent_factorizations` in the diagnostics), without storing the inverse.
 
 ### Backends not covered by this release
 

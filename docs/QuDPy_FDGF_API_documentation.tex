@@ -516,6 +516,8 @@ generate_spectrum(
     pathways=None,
     observables=None,
     warn_null=True,
+    strategy="auto",
+    memory_limit_mb=1024.0,
 )
 \end{verbatim}
 evaluates the selected pathways over a multidimensional coordinate grid. The argument \texttt{axes} is a non-empty ordered mapping
@@ -543,16 +545,50 @@ The resulting array shape follows the insertion order of \texttt{axes}. The retu
     \item \texttt{pathways[name]} and component sums in \texttt{components[name]};
     \item per-pathway arrays in \texttt{observables}, indexed first by observable and then by pathway;
     \item component sums in \texttt{observable\_components}, indexed first by observable and then by component;
-    \item pathway metadata and numerical diagnostics, including \texttt{diagnostics["null\_pathways"]} (Sec.~\ref{sec:null-pathways}).
+    \item pathway metadata and numerical diagnostics, including \texttt{diagnostics["null\_pathways"]} (Sec.~\ref{sec:null-pathways}) and the strategy and work counters of Sec.~\ref{sec:strategies}.
 \end{itemize}
 The default detection of each pathway remains in the legacy \texttt{pathways} and \texttt{components} mappings. Additional requested observables are stored separately, preventing one detector from overwriting another.
 \newline
-For every grid point and selected pathway, the solver computes $S_p(\omega)$ and stores the result independently. The component arrays are then formed by summing the corresponding pathway arrays:
+The component arrays are the sums of the corresponding pathway arrays,
 \begin{equation}
-    S_C(\omega) = \sum_{p \in C} S_p(\omega).
+    S_C(\boldsymbol{\xi}) = \sum_{p \in C} S_p(\boldsymbol{\xi}),
 \end{equation}
+where $S_p(\boldsymbol{\xi})$ is evaluated at every grid point $\boldsymbol{\xi}$ by one of the two strategies below.
 
+\subsubsection{Evaluation strategies}
+\label{sec:strategies}
 
+A pathway response is the functional $\langle\!\langle d|\,\mathcal{O}_K\cdots\mathcal{O}_1|\hat{\rho}_0\rangle\!\rangle$ of an ordered chain of operations $\mathcal{O}_k$: the interaction superoperators, the propagators $\exp(\mathcal{L}t)$ of the time intervals and the resolvents $\mathcal{R}_\eta(\omega)$ of the frequency intervals; the detection vector $d$ is $\operatorname{vec}(\hat O^\dagger)$ for an operator observable, and includes the readout interaction of an action-detected observable and the integrated detector of a jump count. The argument \texttt{strategy} selects how the grid is evaluated.
+
+\begin{description}
+    \item[\texttt{"pointwise"}] The chain is propagated at every grid point. Two scanned frequency axes of $N_1$ and $N_2$ points cost $2N_1N_2$ shifted solves per pathway; additional observables reuse the propagation.
+    \item[\texttt{"factorized"}] The chain is cut between two scanned intervals, at an operation $c$ chosen to minimize the number of solves. With $\boldsymbol{\xi}_L$ the points of the axes before the cut and $\boldsymbol{\xi}_R$ those after it,
+    \begin{equation}
+        S_p(\boldsymbol{\xi}_L,\boldsymbol{\xi}_R)
+        = c_p\,\langle\!\langle G(\boldsymbol{\xi}_R)\,|\,F(\boldsymbol{\xi}_L)\rangle\!\rangle,
+        \quad
+        |F\rangle\!\rangle=\mathcal{O}_{c-1}\cdots\mathcal{O}_1|\hat{\rho}_0\rangle\!\rangle,
+        \quad
+        |G\rangle\!\rangle=(\mathcal{O}_K\cdots\mathcal{O}_c)^\dagger|d\rangle\!\rangle .
+    \end{equation}
+    Each side is evaluated once per point of its own axes and the grid is obtained from one matrix product. The adjoint of a resolvent is $\mathcal{R}_\eta(\omega)^\dagger=[(\eta+i\omega)\mathbb{1}-\mathcal{L}^\dagger]^{-1}$, that of a propagator is $\exp(\mathcal{L}^\dagger t)$, and that of a ket (bra) interaction $\hat\rho\mapsto T\hat\rho$ ($\hat\rho\mapsto\hat\rho T^\dagger$) is $\hat Y\mapsto T^\dagger\hat Y$ ($\hat Y\mapsto\hat Y T$). For two axes the cost is $N_1+N_2$ solves per pathway and observable instead of $2N_1N_2$. Pathways that begin with the same operations share them (the three rephasing pathways of the open two-level system start with the same bra interaction and the same resolvent, so they share the whole forward part), the detection vectors of several observables are carried as the columns of one adjoint chain, and operations at fixed coordinates between the two scanned intervals are applied on the side that has fewer vectors. It requires at least two scanned axes; with three axes the cut is placed where it costs least.
+    \item[\texttt{"auto"}] (default) takes the factorized evaluation when it applies, needs fewer solves than the pointwise one and fits in the memory limit, and the pointwise evaluation otherwise.
+\end{description}
+
+The two strategies give the same numbers up to the accuracy of the linear solves: about $10^{-15}$ of the largest value on the dense backend and the GMRES tolerance (\texttt{krylov\_tolerance}, $10^{-10}$ by default) on the sparse backend. The pointwise evaluation is kept for validation and for the cases in which the factorized one does not apply: a single scanned axis, and the \texttt{SparseSectorBackend} for a closed model with a pure state and time intervals only, which is evaluated as a rank-one dyad of two Hilbert-space vectors, cheaper than any Liouville vector. Requesting \texttt{"factorized"} when it does not apply raises \texttt{ValueError}.
+
+The factorized evaluation stores the vectors of the side with fewer vectors for the whole grid (at most $N$ vectors of $D_{\mathrm L}=D_{\mathrm H}^2$ complex entries for each distinct chain) and streams the other side in slabs of its first axis. \texttt{memory\_limit\_mb} bounds the vectors in memory, the slab size being reduced until they fit; the number of solves does not change. If even one slab does not fit, \texttt{"auto"} falls back to the pointwise evaluation, and \texttt{"factorized"} proceeds with slabs of one index.
+
+The diagnostics of the result report what was done:
+\begin{itemize}
+    \item \texttt{diagnostics["strategy"]}: \texttt{"pointwise"} or \texttt{"factorized"};
+    \item \texttt{"resolvent\_solves"}: resolvents applied to a vector (one GMRES run on the sparse backend; one solve or product with a cached inverse on the dense backend);
+    \item \texttt{"resolvent\_factorizations"}: dense matrices factorized or inverted (dense backend; the factorized evaluation factorizes each shifted matrix once for all its vectors and does not keep the inverse);
+    \item \texttt{"propagations"}: time propagators applied to a vector, cache hits excluded;
+    \item \texttt{"maximum\_resolvent\_residual"}: largest absolute residual of the GMRES solves (sparse backend);
+    \item \texttt{"factorization"} (factorized evaluation only): the cut, the axes of each side, the side that is stored, the number of vectors stored, the number of slabs and the number of detection vectors.
+\end{itemize}
+In the pointwise evaluation \texttt{diagnostics["pathways"][name]} holds one record per grid point; in the factorized evaluation it is empty. The counters can be read at any time with \texttt{solver.backend.counters()} and reset with \texttt{reset\_counters()}.
 
 \subsubsection{Coherence-order-resolved-spectrum}
 
@@ -567,7 +603,9 @@ generate_nq_spectrum(
     fixed_coordinates=None,
     pathways=None,
     observables=None,
-    warn_null=True
+    warn_null=True,
+    strategy="auto",
+    memory_limit_mb=1024.0
 )
 \end{verbatim}
 
@@ -772,7 +810,7 @@ Its main limitation is memory scaling. A dense Liouville matrix contains
 impractical rapidly as the Hilbert-space dimension increases.
 
 The dense backend optionally caches time propagators and resolvents. Cache
-sizes are bounded by the \texttt{max\_cache\_entries} option.
+sizes are bounded by the \texttt{max\_cache\_entries} option. The factorized evaluation of a grid (Sec.~\ref{sec:strategies}) solves each shifted system by one factorization for all the vectors that need that frequency, applies the adjoint resolvent as the solution of the conjugate-transposed system, and does not store the inverses: unlike the pointwise evaluation, it does not depend on the cache holding every frequency of the grid.
 
 \subsubsection*{SparseSectorBackend}
 

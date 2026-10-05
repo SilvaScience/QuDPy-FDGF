@@ -170,6 +170,29 @@ class BackendBase(ABC):
         self._observable_blocks = {}
         self._hamiltonian = None
         self.generator = None
+        self.reset_counters()
+
+    # -------------------------------------------------------------------------- solve counters
+    def reset_counters(self):
+        """Zero the counters of linear solves and propagations (see ``counters``)."""
+        self._counters = {
+            "resolvent_solves": 0,
+            "resolvent_factorizations": 0,
+            "propagations": 0,
+        }
+        self._max_residual = 0.0
+
+    def counters(self):
+        """Work done since ``reset_counters``.
+
+        ``resolvent_solves``: resolvents applied to a vector (one GMRES run, or one solve or product
+        with a dense inverse); ``resolvent_factorizations``: dense matrices factorized or inverted
+        (dense backend only); ``propagations``: time propagators applied to a vector, cache hits
+        excluded; ``maximum_resolvent_residual``: largest absolute residual of the GMRES solves.
+        """
+        result = dict(self._counters)
+        result["maximum_resolvent_residual"] = self._max_residual
+        return result
 
     def build(self, model, context=None):
         """Model and context -> initialized sector operators and state."""
@@ -654,6 +677,41 @@ class BackendBase(ABC):
             )
         return self._transition_blocks[key]
 
+    def _selected_transition_blocks(
+        self, operator_name, direction, source_sector, target_sector
+    ):
+        """Transition constraints -> list of (source, target, block) that match them."""
+        selected = []
+        sources = (
+            (source_sector,)
+            if source_sector is not None
+            else self.layout.sectors
+        )
+        for source in sources:
+            if source not in self.layout.dimensions:
+                raise SectorError(f"Unknown source sector: {source!r}")
+            blocks = self._get_transition_blocks(
+                operator_name, direction, source
+            )
+            for target, operator in blocks.items():
+                if target_sector is not None and target != target_sector:
+                    continue
+                selected.append((source, target, operator))
+        if (
+            target_sector is not None
+            and target_sector not in self.layout.dimensions
+        ):
+            raise SectorError(f"Unknown target sector: {target_sector!r}")
+        if (
+            source_sector is not None or target_sector is not None
+        ) and not selected:
+            raise SectorError(
+                "Constrained transition matches no model block: "
+                f"operator={operator_name!r}, direction={direction!r}, "
+                f"source={source_sector!r}, target={target_sector!r}."
+            )
+        return selected
+
     def apply_transition_matrix(
         self,
         matrix,
@@ -666,38 +724,31 @@ class BackendBase(ABC):
         """Matrix and transition -> transition applied to every column."""
         matrix = self._matrix_argument(matrix)
         result = np.zeros(matrix.shape, dtype=np.complex128)
-        matched_block = False
-        sources = (
-            (source_sector,)
-            if source_sector is not None
-            else self.layout.sectors
-        )
-        for source in sources:
-            if source not in self.layout.dimensions:
-                raise SectorError(f"Unknown source sector: {source!r}")
-            source_matrix = matrix[self.layout.slices[source]]
-            blocks = self._get_transition_blocks(
-                operator_name, direction, source
-            )
-            for target, operator in blocks.items():
-                if target_sector is not None and target != target_sector:
-                    continue
-                matched_block = True
-                result[self.layout.slices[target]] += apply_operator_matrix(
-                    operator, source_matrix
-                )
-        if (
-            target_sector is not None
-            and target_sector not in self.layout.dimensions
+        for source, target, operator in self._selected_transition_blocks(
+            operator_name, direction, source_sector, target_sector
         ):
-            raise SectorError(f"Unknown target sector: {target_sector!r}")
-        if (
-            source_sector is not None or target_sector is not None
-        ) and not matched_block:
-            raise SectorError(
-                "Constrained transition matches no model block: "
-                f"operator={operator_name!r}, direction={direction!r}, "
-                f"source={source_sector!r}, target={target_sector!r}."
+            result[self.layout.slices[target]] += apply_operator_matrix(
+                operator, matrix[self.layout.slices[source]]
+            )
+        return result
+
+    def apply_transition_adjoint_matrix(
+        self,
+        matrix,
+        *,
+        operator_name,
+        direction,
+        source_sector=None,
+        target_sector=None,
+    ):
+        """Matrix and transition T -> T^dagger applied to every column."""
+        matrix = self._matrix_argument(matrix)
+        result = np.zeros(matrix.shape, dtype=np.complex128)
+        for source, target, operator in self._selected_transition_blocks(
+            operator_name, direction, source_sector, target_sector
+        ):
+            result[self.layout.slices[source]] += apply_adjoint_operator_matrix(
+                operator, matrix[self.layout.slices[target]]
             )
         return result
 
@@ -760,6 +811,97 @@ class BackendBase(ABC):
             basis[np.arange(first, last), np.arange(last - first)] = 1.0
             matrix[:, first:last] = apply_operator_matrix(operator, basis)
         return matrix
+
+    # ------------------------------------------------------- primitives of the factorized evaluation
+    supports_factorized = False
+
+    def factorized_applicable(self, protocol):
+        """Protocol -> whether the factorized evaluation is available for it."""
+        return bool(self.supports_factorized)
+
+    def liouville_initial_vector(self):
+        """Reference state -> column-stacked density vector."""
+        return np.asarray(
+            self._initial_density_matrix, dtype=np.complex128
+        ).reshape(-1, order="F")
+
+    def interaction_block(self, states, interaction, *, adjoint=False):
+        """Liouville vectors (columns) -> interaction superoperator, or its adjoint, on each.
+
+        A ket interaction is ``rho -> T rho`` (adjoint ``Y -> T^+ Y``), a bra interaction is
+        ``rho -> rho T^+`` (adjoint ``Y -> Y T``); ``T`` is the transition operator of the
+        interaction. Both are evaluated on the matrices of all the columns at once.
+        """
+        size = self.layout.total_dimension
+        states = np.asarray(states, dtype=np.complex128)
+        count = states.shape[1]
+        cube = states.reshape((size, size, count), order="F")        # cube[x, y, c] = rho_c[x, y]
+        action = (
+            self.apply_transition_adjoint_matrix
+            if adjoint
+            else self.apply_transition_matrix
+        )
+        constraints = {
+            "operator_name": interaction.operator,
+            "direction": interaction.direction,
+            "source_sector": interaction.source_sector,
+            "target_sector": interaction.target_sector,
+        }
+        if interaction.side == "ket":
+            result = action(cube.reshape(size, size * count), **constraints)
+            result = result.reshape(size, size, count)
+        else:
+            flipped = np.conj(cube).transpose(1, 0, 2).reshape(size, size * count)
+            acted = action(flipped, **constraints).reshape(size, size, count)
+            result = np.conj(acted).transpose(1, 0, 2)
+        return np.ascontiguousarray(result).reshape((size * size, count), order="F")
+
+    def interval_block(self, states, domain, values, eta=None, *, adjoint=False):
+        """Liouville vectors -> propagator or resolvent (or its adjoint) at several coordinates.
+
+        ``states`` has shape ``(D**2, k)``; the result has shape ``(D**2, k, len(values))``.
+        ``domain`` is ``"time"`` (``exp(L t)``) or ``"frequency"`` (the resolvent of broadening
+        ``eta``). Implemented by the backends that support the factorized evaluation.
+        """
+        raise NotImplementedError(
+            f"Backend {self.name!r} does not implement the factorized evaluation."
+        )
+
+    def detector_vector(self, spec):
+        """Observable -> vector ``d`` with value ``<<d|rho>>`` for the column-stacked ``rho``.
+
+        Follows the pointwise evaluation: the operator or jump-rate contraction (efficiency only
+        for a jump rate), the projection interactions of an action-detected observable and the
+        integrated detector (exact, or ``n_steps`` trapezoid samples) of an integrated jump.
+        """
+        scale = 1.0
+        if spec.kind == "integrated_jump" and spec.integration == "exact":
+            base = self._integrated_detector(spec)
+            scale = spec.efficiency
+        else:
+            matrix = self.apply_detection_operator_matrix(
+                np.eye(self.layout.total_dimension, dtype=np.complex128),
+                spec.instantaneous().without_projection(),
+            )
+            base = matrix.conj().T.reshape(-1, order="F")
+            if spec.kind == "jump_rate":
+                scale = spec.efficiency
+            elif spec.kind == "integrated_jump":             # trapezoid quadrature of the window
+                times = np.linspace(*spec.time_window, spec.n_steps)
+                weights = np.trapezoid(np.eye(spec.n_steps), times)
+                block = self.interval_block(
+                    base[:, None], "time", times, adjoint=True
+                )[:, 0, :]
+                base = block @ weights
+                scale = spec.efficiency
+        projections = spec.projection_interactions
+        if not projections:
+            return scale * np.asarray(base, dtype=np.complex128)
+        total = np.zeros_like(base, dtype=np.complex128)
+        for interaction in projections:
+            acted = self.interaction_block(base[:, None], interaction, adjoint=True)[:, 0]
+            total += np.conj(interaction.perturbative_prefactor) * acted
+        return scale * total
 
     def clear_caches(self):
         """Clear coordinate-dependent caches."""
