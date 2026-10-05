@@ -57,7 +57,8 @@ src/qudpy_fdgf/          the package (generic engine, no physical model)
 examples/                quickstart.py and the three examples of the article as notebooks
     old_scripts/         earlier versions of the examples, kept until the review is finished
 validation/              models.py, analysis/, benchmarks/, results/ (see validation/README.md)
-tests/                   api/ (contracts and options), physics/ (closed-form results and limits)
+tests/                   api/ (contracts and options), physics/ (closed-form results and limits),
+                         regression/ (stored outputs that refactors of the numerical core must reproduce)
 docs/                    API reference manual (PDF and LaTeX source)
 ```
 
@@ -100,7 +101,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `34 passed` in about 15 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `42 passed` in about 17 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -111,7 +112,10 @@ Expected: `34 passed` in about 15 s (a local `tests/consistency/` folder, if pre
 - `python -m pytest`: runs `tests/` in about 15 s (`-m "not slow"` skips the slowest). `tests/api/`
   checks the contracts and options of the library, `tests/physics/` checks closed-form results and
   limiting cases of the manuscript (Example 1 formulas, exact jump integral, decay rates, harmonic
-  cancellation at fifth order).
+  cancellation at fifth order). `tests/regression/` compares eight small calculations (two-level
+  system, dissipative and thermal chains, time-domain route, fifth-order bosons) with stored outputs
+  (`data/snapshots.npz`); regenerate them only on purpose with
+  `python tests/regression/generate_snapshots.py`.
 - `validation/`: analysis notebooks (convergence, analytical limits), benchmark notebooks
   and scripts (time, memory, comparison with the original QuDPy), shared models and results.
   See `validation/README.md`.
