@@ -16,12 +16,21 @@ AXES = {"w1": np.linspace(-2.15, -1.9, 4), "w3": np.linspace(1.9, 2.15, 4)}
 ETA = 0.002
 
 
-def spectrum(model, backend, **options):
+def run(model, backend, **options):
     solver = SpectroscopySolver(backend=backend, eta=ETA, **options)
     solver.feed_model(model)
-    result = solver.generate_spectrum(PROTOCOL, AXES, pathways=REPHASING,
-                                      fixed_coordinates={"t2": 10.0})
-    return result.components["rephasing"]
+    return solver.generate_spectrum(PROTOCOL, AXES, pathways=REPHASING,
+                                    fixed_coordinates={"t2": 10.0})
+
+
+def spectrum(model, backend, **options):
+    return run(model, backend, **options).components["rephasing"]
+
+
+def iterations(result):
+    """Total GMRES iterations of a result."""
+    info = result.diagnostics["solver"]
+    return info["iterations_mean"] * info["solves"]
 
 
 def test_generator_diagonal_matches_the_dense_generator():
@@ -45,19 +54,19 @@ def test_spectra_are_unchanged(dissipative):
     assert np.max(np.abs(preconditioned - reference)) / scale < 1e-9
 
 
-def test_closed_model_in_its_eigenbasis_needs_one_iteration(gmres_iterations):
-    spectrum(three_site_chain(dissipative=False), "sparse_sector",
-             krylov_tolerance=1e-12, preconditioner="diagonal")
-    assert gmres_iterations and max(gmres_iterations) == 1
+def test_closed_model_in_its_eigenbasis_needs_one_iteration():
+    result = run(three_site_chain(dissipative=False), "sparse_sector",
+                 krylov_tolerance=1e-12, preconditioner="diagonal")
+    info = result.diagnostics["solver"]
+    assert info["solves"] > 0 and info["iterations_max"] == 1
 
 
-def test_dissipation_needs_fewer_iterations(gmres_iterations):
-    spectrum(three_site_chain(), "sparse_sector", krylov_tolerance=1e-12)
-    plain = sum(gmres_iterations)
-    gmres_iterations.clear()
-    spectrum(three_site_chain(), "sparse_sector", krylov_tolerance=1e-12,
-             preconditioner="diagonal")
-    assert sum(gmres_iterations) < plain
+def test_dissipation_needs_fewer_iterations():
+    plain = run(three_site_chain(), "sparse_sector", krylov_tolerance=1e-12)
+    preconditioned = run(three_site_chain(), "sparse_sector", krylov_tolerance=1e-12,
+                         preconditioner="diagonal")
+    assert iterations(preconditioned) < iterations(plain)
+
 
 
 def test_hilbert_resolvent_is_unchanged():

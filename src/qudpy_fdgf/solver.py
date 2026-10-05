@@ -502,6 +502,11 @@ class SpectroscopySolver:
         counters = getattr(self.backend, "counters", None)
         if counters is not None:
             evaluation.update(counters())
+        statistics = getattr(self.backend, "solve_statistics", None)
+        if statistics is not None:
+            evaluation["solver"] = self._solver_diagnostics(
+                statistics(), protocol, normalized_axes, fixed_coordinates
+            )
 
         components = {}
         for pathway in selected:
@@ -561,6 +566,40 @@ class SpectroscopySolver:
                     stacklevel=2,
                 )
         return result
+
+    def _solver_diagnostics(self, statistics, protocol, axes, fixed_coordinates):
+        """Solve statistics -> diagnostics with the conditioning of the shifted systems.
+
+        ``condition_estimate`` is ``max (eta + |omega| + ||L||) / eta`` over the frequency
+        intervals, with ``||L||`` the spectral norm of the generator (power iteration): the
+        condition number of a shifted system when ``L`` is normal (a closed model in its
+        eigenbasis, or weak dissipation), since ``||[(eta - i omega) - L]^-1|| <= 1/eta``; for a
+        non-normal generator the same inverse is bounded by ``sqrt(D) / eta`` in the
+        Hilbert-Schmidt norm, from the contraction of the GKSL semigroup in the trace norm.
+        ``forward_error_estimate`` is its product with the largest relative residual.
+        """
+        info = dict(statistics)
+        estimate = None
+        if info.get("solves"):
+            norm = None
+            for interval in protocol.intervals:
+                if interval.domain != "frequency":
+                    continue
+                eta = self.backend.eta if interval.eta is None else interval.eta
+                if eta <= 0:
+                    continue
+                values = axes.get(interval.name, fixed_coordinates.get(interval.name))
+                largest = float(np.max(np.abs(np.asarray(values, dtype=float))))
+                if norm is None:
+                    norm = self.backend.generator_norm()
+                candidate = (eta + largest + norm) / eta
+                estimate = candidate if estimate is None else max(estimate, candidate)
+        info["condition_estimate"] = estimate
+        residual = info.get("relative_residual_max")
+        info["forward_error_estimate"] = (
+            None if estimate is None or residual is None else estimate * residual
+        )
+        return info
 
     def _choose_strategy(
         self,

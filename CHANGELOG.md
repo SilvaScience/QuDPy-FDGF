@@ -39,6 +39,18 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 - `generators.operator_matmat` and `operator_rmatmat` apply an operator to a matrix.
 
 ### Added
+- Diagnostics of the linear solves: `result.diagnostics["solver"]` with `solves`, `iterations_mean`,
+  `iterations_max`, `relative_residual_max`, `relative_residual_mean` (true residual `||b - S x|| /
+  ||b||`, a backward error), `condition_estimate` (`max (eta + |omega| + ||L||) / eta` over the
+  frequency intervals, `||L||` by power iteration in `backend.generator_norm()`) and
+  `forward_error_estimate`; `backend.solve_statistics()`; backend option `record_solves=True`
+  (one record per solve). The Hilbert-space resolvent reports `iterations` and `relative_residual`.
+  The dense backend reports the residual of its direct solves in the factorized evaluation.
+  Iterative refinement was evaluated and not kept: with GMRES each refinement step costs as many
+  iterations as the solve it corrects, so reaching 5e-13 from 1e-6 takes 36 iterations (one step, summed over
+  four frequencies) where a solve with `krylov_tolerance=1e-12` takes 28 and ends at 9e-16 (thermal XXZ chain,
+  L = 4, eta = 0.03 meV; same ratio for the dissipative three-site chain with the diagonal preconditioner, 24
+  against 18 over six frequencies). Lower `krylov_tolerance` instead.
 - `generate_spectrum(..., strategy="auto"|"factorized"|"pointwise", memory_limit_mb=1024.0)`.
   `result.diagnostics` reports `strategy`, `resolvent_solves`, `resolvent_factorizations` (dense
   backend), `propagations`, `maximum_resolvent_residual` (sparse backend) and, for the factorized

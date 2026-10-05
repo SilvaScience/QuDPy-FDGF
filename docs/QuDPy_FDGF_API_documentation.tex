@@ -586,6 +586,7 @@ The diagnostics of the result report what was done:
     \item \texttt{"resolvent\_factorizations"}: dense matrices factorized or inverted (dense backend; the factorized evaluation factorizes each shifted matrix once for all its vectors and does not keep the inverse);
     \item \texttt{"propagations"}: time propagators applied to a vector, cache hits excluded;
     \item \texttt{"maximum\_resolvent\_residual"}: largest absolute residual of the GMRES solves (sparse backend);
+    \item \texttt{"solver"}: iterations, residuals and conditioning of the linear solves (Sec.~\ref{sec:solve-accuracy});
     \item \texttt{"factorization"} (factorized evaluation only): the cut, the axes of each side, the side that is stored, the number of vectors stored, the number of slabs and the number of detection vectors.
 \end{itemize}
 In the pointwise evaluation \texttt{diagnostics["pathways"][name]} holds one record per grid point; in the factorized evaluation it is empty. The counters can be read at any time with \texttt{solver.backend.counters()} and reset with \texttt{reset\_counters()}.
@@ -881,9 +882,9 @@ A frequency-domain interval is evaluated by solving
 \operatorname{vec}(\hat{\rho})
 \end{equation}
 
-with the GMRES iterative solver. The convergence residual is stored in the
-pathway diagnostics. If GMRES does not converge within the requested
-tolerance, the backend raises a convergence error.
+with the GMRES iterative solver. The iterations and the residual of every solve are
+recorded (see the paragraph on the accuracy of the solves below). If GMRES does not
+converge within the requested tolerance, the backend raises a convergence error.
 
 The sparse backend also exposes a Hilbert-space resolvent,
 
@@ -919,8 +920,27 @@ The options below are passed to \texttt{SpectroscopySolver} together with
     \texttt{ValueError};
     \item \texttt{cache\_propagations} (default \texttt{True}) and
     \texttt{max\_cache\_entries} (default 32): caching of propagated states and
-    its bound.
+    its bound;
+    \item \texttt{record\_solves} (default \texttt{False}, also accepted by the dense backend): keep one record per linear solve in \texttt{diagnostics["solver"]["records"]} (Sec.~\ref{sec:solve-accuracy}).
 \end{itemize}
+
+\paragraph{Accuracy of the solves.}
+\label{sec:solve-accuracy}
+\texttt{result.diagnostics["solver"]} summarizes the shifted solves of a call to \texttt{generate\_spectrum}:
+\begin{itemize}
+    \item \texttt{"method"} (\texttt{"gmres"} or \texttt{"direct"}) and \texttt{"solves"};
+    \item \texttt{"iterations\_mean"} and \texttt{"iterations\_max"} (GMRES);
+    \item \texttt{"relative\_residual\_max"} and \texttt{"relative\_residual\_mean"}: $\|b-Sx\|/\|b\|$ for the shifted system $Sx=b$, $S=(\eta-i\omega)\mathbb{1}-\mathcal{L}$;
+    \item \texttt{"condition\_estimate"} and \texttt{"forward\_error\_estimate"}, below;
+    \item \texttt{"records"}, one dictionary per solve (\texttt{omega}, \texttt{eta}, \texttt{adjoint}, \texttt{iterations}, \texttt{relative\_residual}), when the backend option \texttt{record\_solves=True} is given.
+\end{itemize}
+The residual is the true one, not the preconditioned one on which GMRES stops, and it is a backward error: $x$ solves $(S+E)x=b$ exactly with $\|E\|\leq\|b-Sx\|/\|x\|$. The relative error of $x$ is at most $\kappa(S)=\|S\|\|S^{-1}\|$ times the relative residual. For a normal generator, such as a closed model in its eigenbasis, the eigenvalues of $S$ are $\eta+\kappa_\nu-i(\omega-\Omega_\nu)$ with $\kappa_\nu\geq0$, so $\|S^{-1}\|\leq1/\eta$, $\|S\|\leq\eta+|\omega|+\|\mathcal{L}\|$ and
+\begin{equation}
+    \kappa(S)\leq\frac{\eta+|\omega|+\|\mathcal{L}\|}{\eta}\simeq\frac{\|\mathcal{L}\|}{\eta},
+\end{equation}
+whatever the dimension. For a dissipative generator the same resolvent has trace-norm norm at most $1/\eta$, because $\exp(\mathcal{L}t)$ is a completely positive trace-preserving map and the resolvent is its Laplace transform; in the Hilbert--Schmidt norm of the solver this gives $\|S^{-1}\|\leq\sqrt{D_{\mathrm H}}/\eta$, a worst case that the examples do not approach. \texttt{"condition\_estimate"} is the right-hand side above, with $\|\mathcal{L}\|$ obtained by power iteration (\texttt{backend.generator\_norm()}, a lower estimate) and the maximum over the frequency intervals of the protocol; it is \texttt{None} when no interval is in the frequency domain. \texttt{"forward\_error\_estimate"} is its product with the largest relative residual. In the three examples of the article the error of a solve is of the order of its relative residual, far below this bound. The Hilbert-space resolvent returns \texttt{iterations} and \texttt{relative\_residual} in its diagnostics. The dense backend reports the residual of its direct solves in the factorized evaluation; the pointwise evaluation applies cached inverses and reports none.
+
+Reducing the residual is a matter of \texttt{krylov\_tolerance}. Iterative refinement, which solves $S\,\delta=b-Sx$ and updates $x$, was evaluated and is not offered: each step costs as many GMRES iterations as the solve it corrects, so that reaching $5\times10^{-13}$ from $10^{-6}$ takes 36 iterations, summed over four frequencies, on the thermal four-site chain at $\eta=0.03$~meV, whereas a solve with \texttt{krylov\_tolerance=1e-12} takes 28 for an error of $9\times10^{-16}$.
 
 \paragraph{Diagonal preconditioner.}
 With \texttt{preconditioner="diagonal"}, each GMRES solve of the Liouville

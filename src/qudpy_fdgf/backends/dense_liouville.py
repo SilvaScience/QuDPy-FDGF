@@ -133,8 +133,18 @@ class DenseLiouvilleBackend(BackendBase):
             matrix = shift * self._I_liouville - self._A_dense
             if adjoint:
                 matrix = matrix.conj().T
-            result = prefactor * np.linalg.solve(matrix, states)
+            raw = np.linalg.solve(matrix, states)
+            result = prefactor * raw
             self._counters["resolvent_factorizations"] += 1
+            norms = np.linalg.norm(states, axis=0)
+            residuals = np.linalg.norm(matrix @ raw - states, axis=0)
+            for norm, residual in zip(norms, residuals):
+                self._record_solve(
+                    relative_residual=residual / norm if norm > 0 else 0.0,
+                    omega=float(omega),
+                    eta=float(eta),
+                    adjoint=bool(adjoint),
+                )
         self._counters["resolvent_solves"] += states.shape[1]
         return result
 

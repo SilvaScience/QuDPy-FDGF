@@ -102,7 +102,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `138 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `150 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -438,6 +438,7 @@ result.diagnostics["strategy"]            # "factorized"
 result.diagnostics["resolvent_solves"]    # linear solves done (GMRES runs, or dense solves)
 result.diagnostics["propagations"]        # time propagators applied to a vector, cache hits excluded
 result.diagnostics["factorization"]       # cut, axes of each side, vectors stored, number of slabs
+result.diagnostics["solver"]              # iterations and residuals of the linear solves (below)
 
 solver.generate_spectrum(protocol, axes, pathways=pathways, strategy="pointwise")   # one propagation per point
 ```
@@ -455,6 +456,26 @@ solver.generate_spectrum(protocol, axes, pathways=pathways, strategy="pointwise"
   and streams the other side in slabs of its first axis so that the vectors in memory stay below
   `memory_limit_mb`; the solves are the same, only the memory changes. `generate_nq_spectrum` takes
   the same two arguments.
+
+### Accuracy of the linear solves
+
+`result.diagnostics["solver"]` summarizes the shifted solves of a call: `solves`,
+`iterations_mean` and `iterations_max` (GMRES), `relative_residual_max` and
+`relative_residual_mean`, `condition_estimate` and `forward_error_estimate`. The relative
+residual is `||b - S x|| / ||b||` for the shifted system `S x = b`, with the *true* residual (GMRES
+with a preconditioner stops on the preconditioned one); it is a backward error. The error of `x`
+is at most the condition number of `S` times it, and for a normal generator (a closed model in its
+eigenbasis) `cond(S) <= (eta + |omega| + ||L||) / eta`: the conditioning is set by `||L|| / eta`,
+whatever the dimension. `condition_estimate` is that quantity (`||L||` by power iteration,
+`backend.generator_norm()`), maximized over the frequency intervals, and `forward_error_estimate`
+its product with `relative_residual_max`; for a dissipative generator the bound holds up to a
+factor `sqrt(D)`. In the examples the actual error is of the order of the residual itself, far
+below this worst case. A tighter `krylov_tolerance` is the way to a smaller residual (iterative
+refinement was tried and does not beat it: see the CHANGELOG).
+`SpectroscopySolver(..., record_solves=True)` keeps one record per solve (`diagnostics["solver"]["records"]`:
+frequency, broadening, forward or adjoint, iterations, relative residual). The dense backend reports the
+residual of its direct solves in the factorized evaluation (`relative_residual_max` is `None` in the
+pointwise one, which applies cached inverses).
 
 ## Plotter V10
 

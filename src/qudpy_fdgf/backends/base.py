@@ -181,6 +181,89 @@ class BackendBase(ABC):
             "propagations": 0,
         }
         self._max_residual = 0.0
+        self._solve_statistics = {
+            "iterations": 0,
+            "iterations_max": 0,
+            "residual_samples": 0,
+            "relative_residual_sum": 0.0,
+            "relative_residual_max": 0.0,
+        }
+        self._solve_log = []
+
+    def _record_solve(self, *, iterations=0, relative_residual=None, **context):
+        """One linear solve -> iteration count and relative residual."""
+        statistics = self._solve_statistics
+        statistics["iterations"] += int(iterations)
+        statistics["iterations_max"] = max(statistics["iterations_max"], int(iterations))
+        if relative_residual is not None:
+            statistics["residual_samples"] += 1
+            statistics["relative_residual_sum"] += float(relative_residual)
+            statistics["relative_residual_max"] = max(
+                statistics["relative_residual_max"], float(relative_residual)
+            )
+        if self.options.get("record_solves", False):
+            self._solve_log.append(
+                {
+                    "iterations": int(iterations),
+                    "relative_residual": relative_residual,
+                    **context,
+                }
+            )
+
+    def solve_statistics(self):
+        """Linear solves since ``reset_counters`` -> iterations and relative residuals.
+
+        ``relative_residual`` is ``||b - S x|| / ||b||`` with the true (not the preconditioned)
+        residual of the shifted system ``S x = b``: a backward error. The relative error of ``x``
+        is at most the condition number of ``S`` times it. ``records`` (one entry per solve) is
+        present when the backend option ``record_solves`` is true.
+        """
+        statistics = self._solve_statistics
+        solves = self._counters["resolvent_solves"]
+        samples = statistics["residual_samples"]
+        result = {
+            "method": self._solve_method,
+            "solves": solves,
+            "relative_residual_max": (
+                statistics["relative_residual_max"] if samples else None
+            ),
+            "relative_residual_mean": (
+                statistics["relative_residual_sum"] / samples if samples else None
+            ),
+        }
+        if self._solve_method == "gmres":
+            result["iterations_mean"] = statistics["iterations"] / solves if solves else None
+            result["iterations_max"] = statistics["iterations_max"]
+        if self.options.get("record_solves", False):
+            result["records"] = list(self._solve_log)
+        return result
+
+    _solve_method = "direct"
+
+    def generator_norm(self, iterations=40):
+        """Spectral norm of the generator ``L`` (Hilbert-Schmidt), by power iteration on ``L^+ L``.
+
+        A lower estimate, cached. It enters the condition number of the shifted systems:
+        ``||(eta - i omega) - L|| <= eta + |omega| + ||L||``, while for a normal ``L`` the inverse
+        has norm ``1/min|eta - i(omega - Omega)| <= 1/eta``.
+        """
+        cached = getattr(self, "_generator_norm", None)
+        if cached is not None:
+            return cached
+        size = self.layout.total_dimension ** 2
+        generator = np.random.default_rng(2024)
+        vector = generator.standard_normal(size) + 1j * generator.standard_normal(size)
+        vector /= np.linalg.norm(vector)
+        estimate = 0.0
+        for _ in range(int(iterations)):
+            image = self.generator.rmatvec(self.generator.matvec(vector))
+            norm = float(np.linalg.norm(image))
+            if norm == 0.0:
+                break
+            estimate = np.sqrt(norm)
+            vector = image / norm
+        self._generator_norm = float(estimate)
+        return self._generator_norm
 
     def counters(self):
         """Work done since ``reset_counters``.

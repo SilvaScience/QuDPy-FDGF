@@ -34,6 +34,7 @@ class SparseSectorBackend(BackendBase):
 
     name = "sparse_sector"
     supports_factorized = True
+    _solve_method = "gmres"
     capabilities = Capabilities(
         pure_state=True,
         mixed_state=True,
@@ -204,6 +205,23 @@ class SparseSectorBackend(BackendBase):
             self._liouville_time_cache.popitem(last=False)
         return propagated
 
+    def _gmres(self, operator, right_hand_side, preconditioner, *, initial_guess=None):
+        """GMRES run -> (solution, SciPy info, number of iterations)."""
+        iterations = []
+        solution, info = gmres(
+            operator,
+            right_hand_side,
+            M=preconditioner,
+            x0=initial_guess,
+            rtol=self.krylov_tolerance,
+            atol=0.0,
+            restart=self.resolvent_restart,
+            maxiter=self.krylov_maxiter,
+            callback=iterations.append,
+            callback_type="pr_norm",
+        )
+        return solution, info, len(iterations)
+
     def _solve_liouville_resolvent(self, density_vector, omega, eta, *, adjoint=False):
         """Vector and frequency -> GMRES solution of the shifted system (or of its adjoint)."""
         shift = self.generator.frequency_shift(omega, eta)
@@ -227,15 +245,9 @@ class SparseSectorBackend(BackendBase):
         preconditioner = (
             None if diagonal is None else self._diagonal_preconditioner(diagonal)
         )
-        raw_solution, info = gmres(
-            operator,
-            density_vector,
-            M=preconditioner,
-            rtol=self.krylov_tolerance,
-            atol=0.0,
-            restart=self.resolvent_restart,
-            maxiter=self.krylov_maxiter,
-        )
+        density_vector = np.asarray(density_vector, dtype=np.complex128).reshape(-1)
+        right_hand_side = float(np.linalg.norm(density_vector))
+        raw_solution, info, iterations = self._gmres(operator, density_vector, preconditioner)
         residual = float(
             np.linalg.norm(operator @ raw_solution - density_vector)
         )
@@ -246,6 +258,13 @@ class SparseSectorBackend(BackendBase):
             )
         self._counters["resolvent_solves"] += 1
         self._max_residual = max(self._max_residual, residual)
+        self._record_solve(
+            iterations=iterations,
+            relative_residual=residual / right_hand_side if right_hand_side > 0 else 0.0,
+            omega=float(omega),
+            eta=float(eta),
+            adjoint=bool(adjoint),
+        )
         prefactor = self.generator.frequency_prefactor
         solution = (np.conj(prefactor) if adjoint else prefactor) * raw_solution
         return np.asarray(solution, dtype=np.complex128), residual
@@ -637,20 +656,16 @@ class SparseSectorBackend(BackendBase):
                 shift - self._hamiltonian_diagonal
             )
         )
-        solution, info = gmres(
-            operator,
-            vector,
-            M=preconditioner,
-            x0=initial_guess,
-            rtol=self.krylov_tolerance,
-            atol=0.0,
-            restart=self.resolvent_restart,
-            maxiter=self.krylov_maxiter,
+        solution, info, iterations = self._gmres(
+            operator, vector, preconditioner, initial_guess=initial_guess
         )
         residual = float(np.linalg.norm(operator @ solution - vector))
+        norm = float(np.linalg.norm(vector))
         diagnostics = {
             "gmres_info": int(info),
+            "iterations": iterations,
             "residual_norm": residual,
+            "relative_residual": residual / norm if norm > 0 else 0.0,
             "omega": float(omega),
             "eta": eta,
         }
