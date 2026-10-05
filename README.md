@@ -397,6 +397,9 @@ solver.feed_model(model)
 - rank-one ket/bra branches;
 - matrix-free Hilbert-space resolvent solved with GMRES;
 - exact frequency-domain pathways through matrix-free Liouville action;
+- optional diagonal preconditioner for the GMRES solves (`preconditioner="diagonal"`): exact, hence
+  one iteration per solve, for a closed model in its eigenbasis; only approximate with collapse
+  channels that couple coherences;
 - no explicit Liouville matrix.
 
 The frequency-domain path still uses a density vector of size \(D^2\). It
