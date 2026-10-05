@@ -197,7 +197,8 @@ rho0 = DensityState(
 
 Cross-sector blocks support bright--dark, spinor, and momentum coherences. The
 solver validates dimensions, Hermiticity, trace, and positivity only for this
-physical initial state.
+physical initial state, and `feed_model` checks that the reference state is stationary
+(next paragraphs).
 
 The thermal context is passed to the model:
 
@@ -212,6 +213,20 @@ solver.feed_model(model, context=context)
 
 `equilibrium_state(context)` must return the exact thermal state in the
 truncated basis built by the model.
+
+The perturbative response assumes that the reference state does not evolve before the first
+pulse, `L rho_ref = 0`. The Gibbs state of `H` is stationary for a closed model, but with
+collapse channels only if they satisfy detailed balance. At the end of `feed_model` the solver
+computes `r = ||L rho_ref|| / ||rho_ref||` (one generator application):
+
+```python
+solver = SpectroscopySolver(eta=0.002, check_stationarity="warn",   # "warn" (default), "error", "off"
+                            stationarity_tolerance=1e-8)
+solver.feed_model(model, context=context)   # StationarityWarning if r > tolerance
+solver.stationarity_residual()              # r, at any time; also in solver.summary()
+```
+
+The check does not construct a stationary state: a state that fails it must be replaced.
 
 ## Dynamics convention
 
@@ -522,7 +537,8 @@ omitted, the backend applies every block declared by the model.
 
 ## Current limitations
 
-- construction of the exact thermal state remains the model's responsibility;
+- construction of the exact thermal state remains the model's responsibility; the solver only
+  checks that the reference state is stationary and warns otherwise;
 - only the GKSL/Lindblad form is supported for non-unitary dynamics;
 - no general Redfield generator, HEOM, or bath memory;
 - the matrix-free frequency-domain resolvent in `SparseSectorBackend` still

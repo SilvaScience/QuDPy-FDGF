@@ -177,7 +177,7 @@ ThermodynamicContext(
     metadata={},
 )
 \end{verbatim}
-The supported ensemble labels are canonical and grand canonical; the $k$ ensemble is independent or global. A missing context does not imply zero temperature or equilibrium: it delegates the default state to the model. When a context is supplied, the optional equilibrium-state method remains model-side; the solver does not infer a thermal state from the Hamiltonian.
+The supported ensemble labels are canonical and grand canonical; the $k$ ensemble is independent or global. A missing context does not imply zero temperature or equilibrium: it delegates the default state to the model. When a context is supplied, the optional equilibrium-state method remains model-side; the solver does not infer a thermal state from the Hamiltonian. The provided adapters build the Gibbs state of $\hat H$ without reference to the collapse channels; whether it is stationary under the generator is checked by the solver (Sec.~\ref{sec:stationarity}).
 
 \subsubsection{Transition, detection, and collapse operators}
 
@@ -380,9 +380,12 @@ SpectroscopySolver(
     eta=0.05,
     requirements=None,
     thermodynamic_context=None,
+    check_stationarity="warn",
+    stationarity_tolerance=1e-8,
     **backend_options
 )
 \end{verbatim}
+The arguments \texttt{check\_stationarity} and \texttt{stationarity\_tolerance} control the check of the reference state described below.
 
 When \texttt{backend="auto"} is selected, the solver compares the effective model requirements with the declared capabilities of the registered backends. Built-in and custom backends are listed by \texttt{available\_backends()} and custom implementations are added with \texttt{register\_backend(name, backend\_class)}.
 
@@ -396,7 +399,8 @@ The method \texttt{feed\_model(model, context=None)} connects a \texttt{SectorMo
     \item resolves the thermodynamic context, initial state, and collapse channels;
     \item updates the effective state and generator requirements;
     \item selects or validates a compatible numerical backend;
-    \item constructs the sector layout, generator, and operator blocks.
+    \item constructs the sector layout, generator, and operator blocks;
+    \item checks that the reference state is stationary (Sec.~\ref{sec:stationarity}).
 \end{enumerate}
 The optional \texttt{context} argument overrides the thermodynamic context provided to the constructor when it is not \texttt{None}. The method return the solver instance itself, allowing chained construction:
 \begin{verbatim}
@@ -405,7 +409,16 @@ The optional \texttt{context} argument overrides the thermodynamic context provi
     .feed_model(model, context=context))
 \end{verbatim}
 
-Pathway calculations cannot be performed before \texttt{feed\_model} has successfully constructed the backend. 
+Pathway calculations cannot be performed before \texttt{feed\_model} has successfully constructed the backend.
+
+\subsubsection{Reference-state check}
+\label{sec:stationarity}
+
+The perturbative response of the manuscript starts from a reference state $\hat\rho_{\mathrm{ref}}$ that does not evolve before the first pulse, $\mathcal{L}\hat\rho_{\mathrm{ref}}=0$. The model supplies this state and nothing in the Hamiltonian guarantees the property: the Gibbs state of $\hat H$ is stationary for a closed model, but with collapse channels it is stationary only if the channels satisfy the detailed balance of $\hat H$ at that temperature. At the end of \texttt{feed\_model} the solver therefore applies the generator once to the reference state and computes the relative residual
+\begin{equation}
+    r=\frac{\lVert\mathcal{L}\kket{\hat\rho_{\mathrm{ref}}}\rVert}{\lVert\kket{\hat\rho_{\mathrm{ref}}}\rVert},
+\end{equation}
+with Frobenius norms and in the units of the Hamiltonian and of the rates. The constructor argument \texttt{check\_stationarity} selects the behavior when $r$ exceeds \texttt{stationarity\_tolerance} (default $10^{-8}$): \texttt{"warn"} (default) emits a \texttt{StationarityWarning}, \texttt{"error"} raises \texttt{StationarityError}, and \texttt{"off"} skips the check. The method \texttt{stationarity\_residual()} returns $r$ at any time, and \texttt{summary()} reports it. For example, an open two-level system at $10~\mathrm{K}$ with the channel $\hat L=\ket{g}\bra{e}$ has a Gibbs state with $9\%$ of excited population that the channel empties: $r=0.03$, and the linear response at resonance is $9\%$ below that of the stationary state, which is the ground state. The check does not construct a stationary state; a state that fails it must be replaced by the user.
 
 
 
@@ -956,6 +969,7 @@ The method \texttt{summary()} returns a serializable description of the construc
     \item model requirements and capabilities;
     \item the sector labels and dimensions;
     \item the total Hilbert-space dimension;
+    \item the stationarity residual of the reference state;
     \item the active pathway metadata;
     \item the transition-operator decomposition when it is advertised by the
     model.

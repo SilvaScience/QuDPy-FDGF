@@ -277,6 +277,16 @@ class BackendBase(ABC):
                 f"(smallest eigenvalue={np.min(eigenvalues):.3e})."
             )
 
+    def stationarity_residual(self):
+        """Reference state -> ``||L rho|| / ||rho||`` (Frobenius norms; 0 for a stationary state).
+
+        The perturbative response assumes that the state before the first pulse does not evolve
+        under the field-free generator.
+        """
+        vector = np.asarray(self._initial_density_matrix, dtype=np.complex128).reshape(-1, order="F")
+        norm = float(np.linalg.norm(vector))
+        return float(np.linalg.norm(self.generator.matvec(vector))) / norm
+
     def _load_initial_condition(self):
         condition = self._resolve_initial_condition()
         if not isinstance(condition, (PureState, DensityState)):

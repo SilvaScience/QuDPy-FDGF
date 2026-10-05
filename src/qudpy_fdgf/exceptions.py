@@ -25,3 +25,15 @@ class SectorError(SolverV10Error):
 
 class ConvergenceError(SolverV10Error):
     """Raised when an iterative algorithm misses its target tolerance."""
+
+
+class StationarityError(ModelContractError):
+    """Raised when the reference state is not stationary and ``check_stationarity="error"``."""
+
+
+class StationarityWarning(UserWarning):
+    """Emitted when the reference state is not stationary under the generator.
+
+    The perturbative response assumes ``L rho_ref = 0``; a thermal state that does not satisfy
+    the detailed balance of the declared collapse channels is not stationary.
+    """

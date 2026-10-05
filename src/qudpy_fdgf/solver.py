@@ -10,6 +10,7 @@ remain in the model; numerical details remain in the backend.
 """
 
 from collections.abc import Mapping
+import warnings
 
 import numpy as np
 
@@ -19,7 +20,7 @@ from .backends import (
 )
 from .capabilities import Capabilities, ModelRequirements
 from .diagnostics import decay_rates
-from .exceptions import CapabilityError
+from .exceptions import CapabilityError, StationarityError, StationarityWarning
 from .observables import ObservableSpec, normalize_observables
 from .pathways import FrequencyPathway
 from .protocols import SpectroscopyProtocol
@@ -43,10 +44,20 @@ class SpectroscopySolver:
         eta=0.05,
         requirements=None,
         thermodynamic_context=None,
+        check_stationarity="warn",
+        stationarity_tolerance=1e-8,
         **backend_options,
     ):
         self.backend_name = str(backend).lower()
         self.eta = float(eta)
+        check_stationarity = str(check_stationarity).lower()
+        if check_stationarity not in ("warn", "error", "off"):
+            raise ValueError(
+                "check_stationarity must be 'warn', 'error', or 'off'; "
+                f"got {check_stationarity!r}."
+            )
+        self.check_stationarity = check_stationarity
+        self.stationarity_tolerance = float(stationarity_tolerance)
         self.backend_options = dict(backend_options)
         self.requirements = (
             None
@@ -177,7 +188,35 @@ class SpectroscopySolver:
         self.model_requirements = actual_requirements
         self.model = model
         self.backend = backend
+        self._check_reference_state()
         return self
+
+    def stationarity_residual(self):
+        """Loaded model -> ``||L rho_ref|| / ||rho_ref||`` of its reference state.
+
+        The perturbative expansion starts from a state that does not evolve before the first
+        pulse; the residual is 0 for a stationary state.
+        """
+        self._require_ready()
+        return self.backend.stationarity_residual()
+
+    def _check_reference_state(self):
+        if self.check_stationarity == "off":
+            return
+        residual = self.backend.stationarity_residual()
+        if residual <= self.stationarity_tolerance:
+            return
+        message = (
+            "The reference state is not stationary under the generator: "
+            f"||L rho|| / ||rho|| = {residual:.2e} > {self.stationarity_tolerance:.0e}. "
+            "The response assumes L rho_ref = 0. A thermal state is stationary only if the "
+            "collapse channels satisfy detailed balance with the Hamiltonian; otherwise supply "
+            "the stationary state of the generator. Set check_stationarity='off' to silence "
+            "this check."
+        )
+        if self.check_stationarity == "error":
+            raise StationarityError(message)
+        warnings.warn(message, StationarityWarning, stacklevel=3)
 
     def set_pathways(self, pathways):
         """Pathway definitions -> active pathway list."""
@@ -590,6 +629,7 @@ class SpectroscopySolver:
             "sectors": self.backend.layout.sectors,
             "sector_dimensions": dict(self.backend.layout.dimensions),
             "total_dimension": self.backend.layout.total_dimension,
+            "stationarity_residual": self.backend.stationarity_residual(),
             "pathways": self.pathway_summary(),
         }
         decomposition = getattr(self.model, "transition_decomposition", None)

@@ -30,6 +30,8 @@ from .exceptions import (
     ModelContractError,
     SectorError,
     SolverV10Error,
+    StationarityError,
+    StationarityWarning,
 )
 from .pathways import (
     FrequencyPathway,
@@ -83,6 +85,8 @@ __all__ = [
     "SpectroscopySolver",
     "SpectroscopyPlotter",
     "SpectrumResult",
+    "StationarityError",
+    "StationarityWarning",
     "ThermodynamicContext",
     "coherence_orders_from_interactions",
     "decay_rates",
