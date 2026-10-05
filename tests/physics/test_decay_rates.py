@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from qudpy_fdgf import EigenbasisKModel, SpectroscopySolver
-from test_integrated_jump import three_site_chain
+from helpers import three_site_chain
 
 GAMMA_1, GAMMA_PHI = 0.04, 0.03
 H = np.diag([0.0, 2.0]).astype(complex)

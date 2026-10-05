@@ -6,6 +6,8 @@ Each check compares a numerical result with a closed-form value:
 - action-detected population: S_pop = -i S_pol (Eq. action_pol_identity);
 - integrated fluorescence: N_rad / P_e = 1 - exp(-gamma_1 T), exactly;
 - dense and sparse backends agree for all three observables of Example 1.
+
+The same relations are shown, with figures, in validation/analysis/example1_analysis.ipynb.
 """
 import numpy as np
 import pytest

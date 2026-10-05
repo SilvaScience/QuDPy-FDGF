@@ -33,5 +33,8 @@ version = { attr = "qudpy_fdgf.__version__" }
 where = ["src"]
 
 [tool.pytest.ini_options]
-# The distributed suite lives in tests/ (it includes the former local/tests file).
+# tests/api: contracts and options of the library; tests/physics: closed-form and limiting-case
+# checks; tests/consistency: local checks against validation/ (not distributed).
 testpaths = ["tests"]
+pythonpath = ["tests", "validation"]
+markers = ["slow: takes more than a few seconds (deselect with -m 'not slow')"]

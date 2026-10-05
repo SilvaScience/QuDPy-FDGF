@@ -9,30 +9,11 @@ eigenbasis, fewer iterations with dissipation, and input validation.
 import numpy as np
 import pytest
 
-import qudpy_fdgf.backends.sparse_sector as sparse_sector
 from qudpy_fdgf import SpectroscopySolver
-from test_integrated_jump import PROTOCOL, REPHASING, three_site_chain
+from helpers import PROTOCOL, REPHASING, three_site_chain
 
 AXES = {"w1": np.linspace(-2.15, -1.9, 4), "w3": np.linspace(1.9, 2.15, 4)}
 ETA = 0.002
-
-
-@pytest.fixture
-def gmres_iterations(monkeypatch):
-    """Record the inner GMRES iterations of every sparse-backend solve."""
-    iterations = []
-    original = sparse_sector.gmres
-
-    def counting(*args, **kwargs):
-        count = [0]
-
-        def callback(_):
-            count[0] += 1
-        out = original(*args, callback=callback, callback_type="pr_norm", **kwargs)
-        iterations.append(count[0])
-        return out
-    monkeypatch.setattr(sparse_sector, "gmres", counting)
-    return iterations
 
 
 def spectrum(model, backend, **options):
