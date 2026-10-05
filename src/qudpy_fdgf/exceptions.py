@@ -27,6 +27,14 @@ class ConvergenceError(SolverV10Error):
     """Raised when an iterative algorithm misses its target tolerance."""
 
 
+class ModelConsistencyWarning(UserWarning):
+    """Emitted when the supplied operators are mutually inconsistent.
+
+    For example, a lowering operator that is not the adjoint of the raising operator, or
+    transition elements that the adapter had to discard.
+    """
+
+
 class StationarityError(ModelContractError):
     """Raised when the reference state is not stationary and ``check_stationarity="error"``."""
 

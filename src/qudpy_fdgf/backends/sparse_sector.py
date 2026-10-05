@@ -443,6 +443,7 @@ class SparseSectorBackend(BackendBase):
         """One pathway propagation -> responses for multiple observables."""
         protocol.validate_pathway(pathway)
         protocol.validate_coordinates(coordinates)
+        self._check_transition_operators(pathway)
         specs = tuple(observables)
         integrated = [
             spec for spec in specs if spec.kind == "integrated_jump"

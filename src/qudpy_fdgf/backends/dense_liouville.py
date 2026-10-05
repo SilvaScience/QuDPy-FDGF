@@ -206,6 +206,7 @@ class DenseLiouvilleBackend(BackendBase):
     def _propagate_pathway(self, pathway, protocol, coordinates):
         protocol.validate_pathway(pathway)
         protocol.validate_coordinates(coordinates)
+        self._check_transition_operators(pathway)
         response = self._rho_initial.copy()
         for interaction, interval in zip(
             pathway.interactions, protocol.intervals

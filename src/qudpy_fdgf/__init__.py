@@ -27,6 +27,7 @@ from .contracts import (
 from .exceptions import (
     CapabilityError,
     ConvergenceError,
+    ModelConsistencyWarning,
     ModelContractError,
     SectorError,
     SolverV10Error,
@@ -70,6 +71,7 @@ __all__ = [
     "Interaction",
     "LowRankDensityBlock",
     "ModelRequirements",
+    "ModelConsistencyWarning",
     "ModelContractError",
     "OperatorLike",
     "ObservableSpec",

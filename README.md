@@ -101,7 +101,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `42 passed` in about 17 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `53 passed` in about 17 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -179,6 +179,13 @@ Each block may be a NumPy array, a SciPy sparse matrix, or a
 `initial_state()` remains available as a backward-compatible fallback for a
 pure state. The solver never builds a thermal basis, chooses thermally
 accessible sectors, or invents dissipative rates.
+
+The backends check the operators they receive. At construction, `H x` and `H^dagger x` are
+compared for random vectors and a non-Hermitian Hamiltonian raises `ModelContractError`
+(option `hermiticity_tolerance`, default 1e-10). At the first use of each interaction operator,
+`J_minus` is compared with `J_plus^dagger` and a mismatch emits `ModelConsistencyWarning`
+(option `transition_tolerance`, default 1e-8), because `mu = J_plus + J_minus` is then not
+Hermitian.
 
 ## Initial states and temperature
 

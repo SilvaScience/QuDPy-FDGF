@@ -187,6 +187,8 @@ For a named interaction operator, the model supplies the physical decomposition
 \end{equation}
 The solver does not infer this decomposition from energy differences or sector labels. The separate \texttt{observable\_blocks} method exposes named detection operators, so propagation and readout operators need not coincide.
 
+The backends check the operators they receive. When they are built, $\hat H x$ and $\hat H^\dagger x$ are compared for two random vectors, and a non-Hermitian Hamiltonian raises \texttt{ModelContractError} (backend option \texttt{hermiticity\_tolerance}, default $10^{-10}$, relative; the check is skipped for matrix-free blocks that provide no adjoint action). At the first use of each interaction operator, $\hat\mu_-x$ is compared with $\hat\mu_+^\dagger x$, and a mismatch emits a \texttt{ModelConsistencyWarning} (option \texttt{transition\_tolerance}, default $10^{-8}$), because $\hat\mu=\hat\mu_++\hat\mu_-$ is then not Hermitian and the detected signal is not that of a physical observable. The adapters supplied with the package satisfy both conditions by construction.
+
 The optional collapse-channel method returns \texttt{CollapseChannel} objects. A channel stores a name, a non-negative rate $\gamma_c$, and blockwise $\hat{L}_c$, with the convention
 \begin{equation}
     \mathcal{L}[\hat{\rho}]=-i[\hat{H},\hat{\rho}]+\sum_c\gamma_c\,\mathcal{D}_c[\hat{\rho}],

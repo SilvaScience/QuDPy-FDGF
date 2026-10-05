@@ -6,6 +6,9 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 ## Unreleased
 
 ### Added
+- Operator checks: the Hamiltonian blocks must be Hermitian (`ModelContractError`, backend option
+  `hermiticity_tolerance`, 1e-10) and `J_minus` must be `J_plus^dagger` (`ModelConsistencyWarning` at
+  the first use of each operator, option `transition_tolerance`, 1e-8).
 - Check of the reference state at `feed_model`: relative residual `||L rho|| / ||rho||`,
   `StationarityWarning` (default) or `StationarityError` above `stationarity_tolerance` (1e-8),
   arguments `check_stationarity="warn"|"error"|"off"` and `stationarity_tolerance` of

@@ -9,6 +9,7 @@ backends can focus on propagation and resolvent algorithms.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import inspect
+import warnings
 
 import numpy as np
 from scipy.sparse.linalg import LinearOperator
@@ -22,7 +23,7 @@ from ..contracts import (
     PureState,
     ThermodynamicContext,
 )
-from ..exceptions import ModelContractError, SectorError
+from ..exceptions import ModelConsistencyWarning, ModelContractError, SectorError
 from ..generators import EvolutionGenerator
 from ..observables import ObservableSpec
 
@@ -134,6 +135,7 @@ class BackendBase(ABC):
         self._collapse_operators = ()
         self._collapse_channel_map = {}
         self._transition_blocks = {}
+        self._checked_transition_operators = set()
         self._observable_blocks = {}
         self._hamiltonian = None
         self.generator = None
@@ -172,6 +174,7 @@ class BackendBase(ABC):
             matvec=self._hamiltonian_matvec,
             rmatvec=self._hamiltonian_rmatvec,
         )
+        self._check_hamiltonian_hermiticity()
         self._cache_and_validate_collapse_channels()
         self.generator = EvolutionGenerator(
             self._hamiltonian,
@@ -179,6 +182,80 @@ class BackendBase(ABC):
         )
         self._load_initial_condition()
         return self
+
+    def _check_hamiltonian_hermiticity(self):
+        """Hamiltonian blocks -> error if ``H x != H^dagger x`` for random vectors.
+
+        Tolerance: backend option ``hermiticity_tolerance`` (default 1e-10, relative).
+        """
+        tolerance = float(self.options.get("hermiticity_tolerance", 1e-10))
+        generator = np.random.default_rng(12345)
+        size = self.layout.total_dimension
+        for _ in range(2):
+            vector = generator.standard_normal(size) + 1j * generator.standard_normal(size)
+            try:
+                forward = self._hamiltonian.matvec(vector)
+                adjoint = self._hamiltonian.rmatvec(vector)
+            except (AttributeError, NotImplementedError, TypeError):
+                return        # matrix-free blocks without an adjoint action: nothing to compare
+            scale = max(
+                float(np.linalg.norm(forward)),
+                float(np.linalg.norm(adjoint)),
+                float(np.finfo(float).tiny),
+            )
+            deviation = float(np.linalg.norm(forward - adjoint)) / scale
+            if deviation > tolerance:
+                raise ModelContractError(
+                    "The Hamiltonian blocks are not Hermitian: "
+                    f"||H x - H^dagger x|| / ||H x|| = {deviation:.2e} > {tolerance:.0e}."
+                )
+
+    def _check_transition_operators(self, pathway):
+        """Pathway -> one-time check of every transition operator it uses."""
+        for interaction in pathway.interactions:
+            name = str(interaction.operator)
+            if name not in self._checked_transition_operators:
+                self._checked_transition_operators.add(name)
+                self._check_transition_pair(name)
+
+    def _check_transition_pair(self, name):
+        """Raising and lowering blocks -> warning if ``J_minus`` is not ``J_plus^dagger``.
+
+        A Hermitian light-matter operator ``mu = J_plus + J_minus`` requires it. Tolerance:
+        backend option ``transition_tolerance`` (default 1e-8, relative).
+        """
+        tolerance = float(self.options.get("transition_tolerance", 1e-8))
+        plus = {
+            source: self._get_transition_blocks(name, "plus", source)
+            for source in self.layout.sectors
+        }
+        minus = {
+            source: self._get_transition_blocks(name, "minus", source)
+            for source in self.layout.sectors
+        }
+        generator = np.random.default_rng(54321)
+        vector = generator.standard_normal(
+            self.layout.total_dimension
+        ) + 1j * generator.standard_normal(self.layout.total_dimension)
+        try:
+            lowering = self._block_operator_matvec(minus, vector)
+            raising_adjoint = self._block_operator_rmatvec(plus, vector)
+        except (AttributeError, NotImplementedError, TypeError):
+            return
+        scale = max(
+            float(np.linalg.norm(lowering)),
+            float(np.linalg.norm(raising_adjoint)),
+            float(np.finfo(float).tiny),
+        )
+        deviation = float(np.linalg.norm(lowering - raising_adjoint)) / scale
+        if deviation > tolerance:
+            warnings.warn(
+                f"The lowering blocks of operator {name!r} are not the adjoint of its raising "
+                f"blocks (relative deviation {deviation:.2e}); mu = J_plus + J_minus is then not "
+                "Hermitian and the detected signal is not that of a physical observable.",
+                ModelConsistencyWarning,
+                stacklevel=4,
+            )
 
     def _call_with_optional_context(self, method):
         try:
