@@ -39,9 +39,13 @@ def results_dirs():
 # ============================================================================= Example 1
 EX1 = dict(omega_eg=2.0, d=0.5, gamma_1=0.04, gamma_phi=0.03, eta=0.002, t2=10.0)
 EX1_AXES = {"omega_1q": np.linspace(-2.5, -1.5, 41), "omega_emit": np.linspace(1.5, 2.5, 41)}
+# R1 (stimulated emission) and R2 (ground-state bleach) exist without population transfer. R3 is the
+# excited-state-absorption sequence of a three-level model; in this two-level model it is non-zero only
+# because the radiative channel moves population from |e> to |g> during t2, which refills the bleach.
 EX1_PATHWAYS = (
     FrequencyPathway(name="R1", interactions=("Bu", "Ku", "Bd"), component="rephasing"),
     FrequencyPathway(name="R2", interactions=("Bu", "Bd", "Ku"), component="rephasing"),
+    FrequencyPathway(name="R3", interactions=("Bu", "Ku", "Ku"), component="rephasing"),
 )
 EX1_PROTOCOL = standard_nq_protocol(order=1, n_interactions=3, nq_interval=1, detection_interval=3,
                                     nq_axis="omega_1q", detection_axis="omega_emit")

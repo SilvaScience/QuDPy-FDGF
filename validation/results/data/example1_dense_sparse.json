@@ -5,15 +5,18 @@
   ],
   "t2": 10.0,
   "eta": 0.002,
-  "time_dense_s": 0.3163341998588294,
-  "time_sparse_s": 4.21204309980385,
+  "time_dense_s": 0.4157307000023138,
+  "time_sparse_s": 5.505893400000787,
   "relative_difference": {
     "polarization/R1": 2.782629360826425e-15,
     "polarization/R2": 2.8601036293747704e-15,
+    "polarization/R3": 2.8484750845795732e-15,
     "population/R1": 2.782629360826425e-15,
     "population/R2": 2.8601036293747704e-15,
+    "population/R3": 2.8484750845795732e-15,
     "fluorescence/R1": 2.697317113650479e-15,
-    "fluorescence/R2": 2.8336610853875316e-15
+    "fluorescence/R2": 2.8336610853875316e-15,
+    "fluorescence/R3": 2.767613969462779e-15
   },
   "worst": 2.8601036293747704e-15
 }

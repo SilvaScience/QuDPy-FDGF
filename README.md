@@ -100,7 +100,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `32 passed` in about 15 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `34 passed` in about 15 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 

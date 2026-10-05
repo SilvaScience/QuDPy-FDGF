@@ -48,7 +48,7 @@ report = {"grid": [41, 41], "t2": 10.0, "eta": 0.002,
           "time_dense_s": t_dense, "time_sparse_s": t_sparse, "relative_difference": {}}
 worst = 0.0
 for name in ("polarization", "population", "fluorescence"):
-    for path in ("R1", "R2"):
+    for path in ("R1", "R2", "R3"):
         a = dense.observables[name][path]
         b = sparse.observables[name][path]
         rel = float(np.max(np.abs(a - b)) / np.max(np.abs(a)))

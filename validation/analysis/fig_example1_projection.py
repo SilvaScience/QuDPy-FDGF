@@ -1,6 +1,6 @@
 """Regenerate fig_example1_projection.pdf (Example 1: the readout interaction selects the population).
 
-All nine maps come from a single third-order propagation of the rephasing pathways R1 + R2 at
+All nine maps come from a single third-order propagation of the rephasing pathways R1 + R2 + R3 at
 t2 = 10 eV^-1 and share one color scale.
 Left: the reference chi^(3) response, contracted with the transition operator on the final
 one-quantum coherence, without projection.

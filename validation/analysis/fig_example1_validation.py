@@ -1,6 +1,8 @@
 """Regenerate fig_example1_validation.pdf (Example 1, open two-level system).
 
-(a) peak amplitude of R1 (SE) and R2 (GSB) versus t2, normalized to t2 = 0;
+(a) peak amplitude of R1 (SE), R2 (GSB) and R3 versus t2, in units of the t2 = 0 amplitude of R2,
+    and the sum (R1 + R2 + R3) / 2; R3 = (Bu, Ku, Ku) is non-zero only because the radiative channel
+    refills the ground state during t2;
 (b) N_rad^(4)(T) / P_e^(4) for R1 versus the detection window T;
 (c) relative error of (b) at T = 5/gamma_1: legacy trapezoidal option versus n_steps,
     and the default exact (Heisenberg-picture) evaluation.
@@ -39,6 +41,8 @@ R1 = FrequencyPathway(name="R1", interactions=("Bu", "Ku", "Bd"),
                       component="rephasing", detection="polarization")
 R2 = FrequencyPathway(name="R2", interactions=("Bu", "Bd", "Ku"),
                       component="rephasing", detection="polarization")
+R3 = FrequencyPathway(name="R3", interactions=("Bu", "Ku", "Ku"),
+                      component="rephasing", detection="polarization")
 protocol = standard_nq_protocol(order=1, nq_interval=1, detection_interval=3,
                                 n_interactions=3, nq_axis="omega_1q",
                                 detection_axis="omega_emit")
@@ -52,16 +56,22 @@ def at_peak(t2, pathways, observables=None):
 
 # ------------------------------------------------------------------ (a) waiting time
 t2_grid = np.linspace(0.0, 60.0, 121)
-amp = {"R1": [], "R2": []}
+peak_values = {"R1": [], "R2": [], "R3": []}
 for t2 in t2_grid:
-    res = at_peak(t2, (R1, R2))
-    for name in amp:
-        amp[name].append(res.pathways[name][0, 0])
-amp = {k: np.abs(np.array(v)) / abs(v[0]) for k, v in amp.items()}
-r1_at_10 = abs(at_peak(10.0, (R1,)).pathways["R1"][0, 0]) / abs(at_peak(0.0, (R1,)).pathways["R1"][0, 0])
-err_a = np.max(np.abs(amp["R1"] - np.exp(-gamma_1 * t2_grid)))
-print(f"(a) R1(t2=10)/R1(0) = {r1_at_10:.6f}   (exp(-0.4) = {np.exp(-0.4):.6f})")
-print(f"(a) max |R1 - exp(-gamma_1 t2)| = {err_a:.1e};  R2 spread = {np.ptp(amp['R2']):.1e}")
+    res = at_peak(t2, (R1, R2, R3))
+    for name in peak_values:
+        peak_values[name].append(res.pathways[name][0, 0])
+unit = peak_values["R2"][0]                       # R2 does not depend on t2
+rel = {k: np.array(v) / unit for k, v in peak_values.items()}
+assert max(np.abs(v.imag).max() for v in rel.values()) < 1e-12        # same phase for the three pathways
+rel = {k: v.real for k, v in rel.items()}
+total_half = (rel["R1"] + rel["R2"] + rel["R3"]) / 2
+decay = np.exp(-gamma_1 * t2_grid)
+err_a = {"R1": np.max(np.abs(rel["R1"] - decay)), "R2": np.max(np.abs(rel["R2"] - 1.0)),
+         "R3": np.max(np.abs(rel["R3"] + 1.0 - decay)), "total": np.max(np.abs(total_half - decay))}
+print(f"(a) R1(t2=10)/R2(0) = {rel['R1'][t2_grid == 10.0][0]:.6f}   (exp(-0.4) = {np.exp(-0.4):.6f})")
+print("(a) max deviations: " + ", ".join(f"{k} {v:.1e}" for k, v in err_a.items()))
+print(f"(a) (R1+R2)/(R1+R2+R3) at t2 = 10: {(rel['R1'] + rel['R2'])[t2_grid == 10.0][0] / (2 * decay[t2_grid == 10.0][0]):.4f}")
 
 
 # ------------------------------------------------------------------ (b), (c) integrated fluorescence
@@ -98,14 +108,20 @@ plt.rcParams.update({"font.size": 7, "axes.labelsize": 7, "legend.fontsize": 6,
 fig, ax = plt.subplots(1, 3, figsize=(390 / 72, 140.4 / 72), constrained_layout=True)
 
 a = ax[0]
-a.plot(t2_grid, amp["R2"], color="C0", lw=1.6, label=r"$R_2$ (GSB)")
-a.plot(t2_grid, np.ones_like(t2_grid), color="0.3", lw=0.8, ls="--", label="stationary")
-a.plot(t2_grid[::3], amp["R1"][::3], "o", ms=2.2, color="C3", label=r"$R_1$ (SE)")
-a.plot(t2_grid, np.exp(-gamma_1 * t2_grid), color="C3", lw=0.8, label=r"$e^{-\gamma_1 t_2}$")
+a.plot(t2_grid, np.ones_like(t2_grid), color="C0", lw=1.4)
+a.plot(t2_grid[::3], rel["R1"][::3], "o", ms=2.2, color="C3")
+a.plot(t2_grid, decay, color="C3", lw=0.8)
+a.plot(t2_grid[::3], rel["R3"][::3], "^", ms=2.4, color="C1")
+a.plot(t2_grid, -(1.0 - decay), color="C1", lw=0.8)
+a.plot(t2_grid[1::3], total_half[1::3], "x", ms=2.6, color="k", mew=0.7)
+a.axhline(0.0, color="0.7", lw=0.5)
 a.axvline(10.0, color="k", ls=":", lw=0.8)
-a.set(xlim=(0, 60), ylim=(0, 1.1), xlabel=r"$t_2$ (eV$^{-1}$)", ylabel="peak amplitude",
+a.text(59, 1.045, r"$R_2$ (GSB)", color="C0", ha="right", va="bottom", fontsize=6)
+a.text(59, 0.62, r"$R_1$ (SE)," + chr(10) + r"$(R_1+R_2+R_3)/2$:" + chr(10) + r"$e^{-\gamma_1 t_2}$", color="0.2",
+       ha="right", va="center", fontsize=6, linespacing=1.3)
+a.text(59, -0.50, r"$R_3$: $-(1-e^{-\gamma_1 t_2})$", color="C1", ha="right", va="center", fontsize=6)
+a.set(xlim=(0, 60), ylim=(-1.1, 1.25), xlabel=r"$t_2$ (eV$^{-1}$)", ylabel=r"peak amplitude / $R_2(0)$",
       title="(a) waiting time")
-a.legend(loc="center right", frameon=False, handlelength=1.5)
 
 b = ax[1]
 T_fine = np.linspace(0, 200, 401)
