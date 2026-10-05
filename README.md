@@ -30,15 +30,15 @@ transitions, initial state, and observable.
 - `examples/quickstart.py`: open two-level system, linear and third-order
   rephasing responses, with analytical checks (about 2 s). It is the Quick
   start of the API documentation.
-- `examples/example1_usage.py`: complete input of Example 1 of the manuscript
-  (Listing 1), with three observables from one propagation (about 1 s).
-- `examples/fig_example1_validation.py`: regenerates the validation figure of
-  Example 1.
-- `python -m pytest`: runs `tests/`, including the analytical checks of the
-  manuscript (23 tests, about 10 s with `OMP_NUM_THREADS=1`).
-- `benchmarks/`: dense versus sparse validation, time and memory versus
-  Hilbert dimension, GMRES iterations versus `eta`, and comparison with time
-  propagation and with the original QuDPy. See `benchmarks/README.md`.
+- `examples/example{1,2,3}_*.ipynb`: the three examples of the manuscript, as notebooks (see
+  `examples/README.md`).
+- `python -m pytest`: runs `tests/` in about 15 s (`-m "not slow"` skips the slowest). `tests/api/`
+  checks the contracts and options of the library, `tests/physics/` checks closed-form results and
+  limiting cases of the manuscript (Example 1 formulas, exact jump integral, decay rates, harmonic
+  cancellation at fifth order).
+- `validation/`: analysis notebooks (convergence, analytical limits), benchmark notebooks
+  and scripts (time, memory, comparison with the original QuDPy), shared models and results.
+  See `validation/README.md`.
 
 ## Dependency direction
 

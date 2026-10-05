@@ -1,0 +1,57 @@
+[
+  {
+    "eta_meV": 0.3,
+    "D": 57,
+    "preconditioner": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 2.5378598388166848e-15,
+    "time_s": 0.30529840011149645,
+    "solves": 54,
+    "mean_iterations": 1.0,
+    "max_iterations": 1
+  },
+  {
+    "eta_meV": 0.1,
+    "D": 57,
+    "preconditioner": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 1.8952513400268346e-15,
+    "time_s": 0.282262499909848,
+    "solves": 54,
+    "mean_iterations": 1.0,
+    "max_iterations": 1
+  },
+  {
+    "eta_meV": 0.03,
+    "D": 57,
+    "preconditioner": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 7.5891996690790045e-16,
+    "time_s": 0.2774603001307696,
+    "solves": 54,
+    "mean_iterations": 1.0,
+    "max_iterations": 1
+  },
+  {
+    "eta_meV": 0.01,
+    "D": 57,
+    "preconditioner": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 1.0003432049774603e-15,
+    "time_s": 0.3776545999571681,
+    "solves": 54,
+    "mean_iterations": 1.0,
+    "max_iterations": 1
+  },
+  {
+    "eta_meV": 0.003,
+    "D": 57,
+    "preconditioner": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 8.465952098471792e-16,
+    "time_s": 0.3296692001167685,
+    "solves": 54,
+    "mean_iterations": 1.0,
+    "max_iterations": 1
+  }
+]

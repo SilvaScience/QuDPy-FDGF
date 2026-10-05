@@ -1,5 +1,0 @@
-{"eta_meV": 0.3, "D": 57, "converged": true, "relative_difference_to_dense": 1.814643969549495e-11, "time_s": 7.736286799889058, "solves": 54, "mean_iterations": 61.77777777777778, "max_iterations": 73}
-{"eta_meV": 0.1, "D": 57, "converged": true, "relative_difference_to_dense": 1.4445982370962896e-11, "time_s": 23.85936460015364, "solves": 54, "mean_iterations": 209.25925925925927, "max_iterations": 257}
-{"eta_meV": 0.03, "D": 57, "converged": true, "relative_difference_to_dense": 1.774084247952122e-11, "time_s": 75.11133510014042, "solves": 54, "mean_iterations": 633.3333333333334, "max_iterations": 894}
-{"eta_meV": 0.01, "D": 57, "converged": true, "relative_difference_to_dense": 9.513027994081288e-12, "time_s": 111.1303057000041, "solves": 54, "mean_iterations": 1212.3703703703704, "max_iterations": 2589}
-{"eta_meV": 0.003, "D": 57, "converged": true, "relative_difference_to_dense": 7.98172842684144e-12, "time_s": 154.84516889997758, "solves": 54, "mean_iterations": 1886.888888888889, "max_iterations": 4661}
