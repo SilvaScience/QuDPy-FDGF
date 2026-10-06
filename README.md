@@ -592,11 +592,14 @@ solver.feed_model(model)
 - matrix-free Hilbert-space resolvent solved with GMRES;
 - exact frequency-domain pathways through matrix-free Liouville action;
 - factorized evaluation of grids (adjoint resolvents, propagators and interactions, shared prefixes);
-- diagonal preconditioner for the GMRES solves: `preconditioner="auto"` (default) switches it on exactly
-  when it is exact, hence one iteration per solve, that is when the Hamiltonian blocks and the collapse
-  operators are diagonal (a closed model in its eigenbasis, pure dephasing), and off otherwise;
-  `"diagonal"` forces it (approximate with collapse channels that couple coherences) and `None` gives
-  plain GMRES; the choice is in `backend.preconditioner` and `diagnostics["solver"]["preconditioner"]`;
+- diagonal preconditioner for the GMRES solves: `preconditioner="auto"` (default) switches it on when the
+  Hamiltonian blocks are diagonal blocks of single sectors (the eigenbasis the model adapters provide)
+  and off otherwise (site basis, couplings between sectors, matrix-free blocks). It is exact, hence one
+  iteration per solve, for a closed model or diagonal collapse operators (pure dephasing); with collapse
+  operators that couple coherences it is approximate but still divides the iterations by 1.3 to 3000 in the
+  models measured (up to a 23 % increase at a dephasing rate of 10 meV, far above the 1 meV scale of the
+  chain). `"diagonal"` forces it and `None` gives plain GMRES; the choice is in `backend.preconditioner` and
+  `diagnostics["solver"]["preconditioner"]`;
 - GMRES restart: `resolvent_restart=None` keeps SciPy's 20; no other value wins on the examples
   (see the CHANGELOG), and `m` costs `(m + 1) D^2` complex numbers;
 - no explicit Liouville matrix.

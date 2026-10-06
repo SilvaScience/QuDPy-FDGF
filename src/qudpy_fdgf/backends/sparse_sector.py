@@ -44,9 +44,12 @@ class SparseSectorBackend(BackendBase):
     The diagonal is exact when the generator is diagonal in the dyad basis, that
     is for a model supplied in its eigenbasis (diagonal Hamiltonian blocks) whose
     collapse operators, if any, are diagonal too: each solve then converges in one
-    iteration. With collapse channels that couple dyads it remains an approximation.
-    The default ``"auto"`` selects ``"diagonal"`` in exactly the cases where it is
-    exact and ``None`` otherwise; ``self.preconditioner`` holds the choice made.
+    iteration. With collapse channels that couple dyads it remains an approximation
+    that still divides the iteration count by a large factor, because the coupling
+    is weak next to the energy differences on the diagonal.
+    The default ``"auto"`` selects ``"diagonal"`` when the Hamiltonian blocks are
+    diagonal blocks of single sectors (the eigenbasis the model adapters provide) and
+    ``None`` otherwise; ``self.preconditioner`` holds the choice made.
     """
 
     preconditioners = (None, "diagonal", "auto")
@@ -114,29 +117,23 @@ class SparseSectorBackend(BackendBase):
         self._hamiltonian_diagonal = None
         self._initial_density_vector = None
 
-    def _generator_is_diagonal(self):
-        """Whether the generator is diagonal in the dyad basis, so that the diagonal preconditioner is exact.
+    def _hamiltonian_is_diagonal(self):
+        """Whether every Hamiltonian block is a diagonal block of one sector (a model in its eigenbasis).
 
-        True when every Hamiltonian block is a diagonal block of one sector (a model in its
-        eigenbasis, no coupling between sectors) and every collapse operator is diagonal as well,
-        which includes the closed models. Blocks that are neither arrays nor sparse matrices
-        cannot be inspected and count as not diagonal.
+        Then the diagonal of the generator in the dyad basis is its unperturbed part, the energy
+        differences, and collapse operators only perturb it. Blocks that are neither arrays nor sparse
+        matrices cannot be inspected and count as not diagonal.
         """
         for source, blocks in self._hamiltonian_blocks.items():
             for target, operator in blocks.items():
                 if target != source or not _is_diagonal(operator):
                     return False
-        for channel in self._collapse_channels:
-            for source, blocks in channel.operator_blocks.items():
-                for target, operator in blocks.items():
-                    if target != source or not _is_diagonal(operator):
-                        return False
         return True
 
     def build(self, model, context=None):
         super().build(model, context=context)
         if self.preconditioner_option == "auto":
-            self.preconditioner = "diagonal" if self._generator_is_diagonal() else None
+            self.preconditioner = "diagonal" if self._hamiltonian_is_diagonal() else None
         self._liouville = self.generator.linear_operator
         self._liouville_diagonal = None
         self._hamiltonian_diagonal = None

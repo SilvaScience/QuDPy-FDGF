@@ -1,4 +1,4 @@
-"""preconditioner="auto" (default): diagonal exactly when the generator is diagonal, none otherwise."""
+"""preconditioner="auto" (default): diagonal when the Hamiltonian blocks are diagonal (eigenbasis), none otherwise."""
 import numpy as np
 import pytest
 from scipy import sparse
@@ -97,10 +97,14 @@ def test_diagonal_collapse_operators_keep_the_generator_diagonal():
     assert spectrum(solver).diagnostics["solver"]["iterations_max"] == 1
 
 
-def test_collapse_operators_that_couple_dyads_leave_it_off():
+def test_collapse_operators_that_couple_dyads_keep_it_on_and_it_helps():
+    """With a diagonal Hamiltonian the diagonal is the dominant part of the generator, exact or not."""
     solver = chosen(three_site_chain(dissipative=True))
-    assert solver.backend.preconditioner is None
-    assert spectrum(solver).diagnostics["solver"]["preconditioner"] is None
+    assert solver.backend.preconditioner == "diagonal"
+    automatic = spectrum(solver).diagnostics["solver"]
+    assert automatic["preconditioner"] == "diagonal"
+    plain = spectrum(chosen(three_site_chain(dissipative=True), preconditioner=None)).diagnostics["solver"]
+    assert automatic["iterations_mean"] * automatic["solves"] < plain["iterations_mean"] * plain["solves"]
 
 
 def test_a_hamiltonian_that_is_not_diagonal_leaves_it_off():

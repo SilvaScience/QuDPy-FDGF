@@ -10,13 +10,20 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   raise a `ValueError` that explains the parameter when it is missing (the former `0.05` has no
   meaning without a unit). Negative, infinite and NaN values are rejected.
 - `SparseSectorBackend`: the default is `preconditioner="auto"` instead of `None`. The diagonal
-  preconditioner is applied when the generator is diagonal in the dyad basis (diagonal Hamiltonian
-  blocks of single sectors, diagonal collapse operators; closed models in their eigenbasis, pure
-  dephasing) and left off otherwise, including matrix-free blocks that cannot be inspected. The
-  numbers do not change beyond the solver tolerance; closed models take one iteration per solve
-  instead of hundreds (Example 2, D = 57: 1 082 iterations and 1.1 s become 1 iteration and 0.01 s).
-  `preconditioner=None` gives the former plain GMRES; the dense-versus-sparse benchmark scripts of Examples 2 and 3 pass it.
-  `diagnostics["solver"]["preconditioner"]` and `backend.preconditioner` report the choice.
+  preconditioner is applied when every Hamiltonian block is a diagonal block of one sector (a model in its
+  eigenbasis, as the adapters provide), whatever the collapse operators, and left off otherwise (site basis,
+  couplings between sectors, matrix-free blocks that cannot be inspected). It is exact for closed models and
+  diagonal collapse operators (one iteration per solve instead of hundreds: Example 2, D = 57, 1 082
+  iterations and 1.1 s become 1 iteration and 0.01 s) and approximate, but far better than none, with
+  operators that couple coherences. Measured against plain GMRES on 30 cases (three-site chain with
+  dissipation x0.1 to x1000, six-site XXZ chain with collective decay or local dephasing from 0.001 to 10 meV,
+  two broadenings, three kinds of start vector, `validation/benchmarks/scripts/bench_preconditioner_dissipative.py`):
+  the ratio of iterations is 3e-4 to 0.76 in 28 cases (54 000 iterations in one plain solve against 1 114
+  preconditioned), 1.20 and 1.23 at a local dephasing of 10 meV, an order of magnitude above the energy scale of the
+  chain; true residuals comparable (all <= 1e-10). The numbers do not change beyond the solver tolerance.
+  `preconditioner=None` gives the former plain GMRES (the dense-versus-sparse benchmark scripts of Examples 2 and 3
+  pass it); `"diagonal"` forces the preconditioner. `diagnostics["solver"]["preconditioner"]` and
+  `backend.preconditioner` report the choice.
 - `EigenbasisKModel` and `ExcitationSectorModel`: `boltzmann_constant` no longer defaults to the
   value in eV/K. New argument `energy_unit` (`"eV"`, `"meV"`, `"cm-1"`, `"THz"`; the last is the
   ordinary frequency E/h, k_B/h = 0.0208 THz/K) sets it; `boltzmann_constant` explicit is still
