@@ -15,7 +15,7 @@ preceded by a markdown cell that explains it.
 Each notebook ends by saving its results in `../validation/results/data/` and its figures in
 `../validation/results/figure/`. Convergence studies, analytical checks and benchmarks of the
 examples are in `../validation/` (see its README); run an example before its analysis notebook.
-Example 4 has no analysis notebook yet.
+Example 4 is compared with the data of the Perspective it is taken from in `validation/analysis/example4_analysis.ipynb`.
 
 Other files in this folder:
 

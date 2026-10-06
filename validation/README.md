@@ -39,6 +39,7 @@ The example notebooks write their models out in full so that each can be read al
 | `analysis/example1_analysis.ipynb` | Linewidth, waiting time, fluorescence window, selection rule of the fourth interaction, exact versus trapezoidal jump integral |
 | `analysis/example2_analysis.ipynb` | Convergence in the magnon cutoff, dense versus sparse agreement, GMRES iterations with and without the preconditioner |
 | `analysis/example3_analysis.ipynb` | Spectrum at η = 2 meV, pathway completeness, truncation at two excitations, harmonic-limit cancellation |
+| `analysis/example4_analysis.ipynb` | Comparison of Example 4 with the stored data of the Perspective repository (six scenarios): coherent and action half widths and amplitudes, sign convention of the action diagrams, excitation-number identity, unbalanced scenario, PL projector, estimator. Reads `results/data/perspective_comparison.json` |
 | `benchmarks/example1_benchmark.ipynb` | Dense versus sparse, frequency domain versus time sampling, original QuDPy |
 | `benchmarks/example2_benchmark.ipynb` | Dense versus sparse, scaling with chain length, GMRES iterations versus η |
 | `benchmarks/example3_benchmark.ipynb` | Dense versus sparse, frequency domain versus time sampling, estimate for the original QuDPy |
@@ -53,6 +54,8 @@ The scripts in `analysis/` redraw the figures of the article into `results/figur
 | `fig_example2_thermal_spectroscopy.py` | Example 2, complete thermal rephasing response | recomputed (~15 min; `plot` redraws from the stored `.npz`) |
 | `fig_example3_2q_map.py` | Example 3, 2Q map at eta = 8 and 2 meV | `example3.npz` + `example3_extra_cases.npz` |
 | `fig_example3_validation.py` | Example 3, pathway orderings, truncation, mode-resolved detection | `example3.npz` + `example3_extra_cases.npz` |
+
+`analysis/compare_perspective.py` evaluates QuDPy-FDGF at the ten points of each stored cut of the Perspective repository and applies its estimator (`python compare_perspective.py "<Perspective repo>/Data/Borealis Data"`, ~5 s); it writes `results/data/perspective_comparison.json`. The Perspective data themselves are not part of this repository.
 
 `cases.py` computes the extra Example 3 cases (eta = 2 meV, N_max = 2) once and stores them in
 `results/data/example3_extra_cases.npz`.

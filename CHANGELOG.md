@@ -103,7 +103,19 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   equals -i times the polarization to 3e-16 with dissipation present (each readout alternative alone breaks it), and a
   single pathway has the width of the declared rates to about 1 %. Results in `validation/results/data/example4.npz`.
   `tests/physics/test_action_number_identity.py` checks the identity (211 tests, plus 4 in the local
-  `tests/consistency/`). The comparison with the published linewidths and with the time-domain QuDPy is not done yet.
+  `tests/consistency/`).
+- `validation/analysis/compare_perspective.py` and `example4_analysis.ipynb`: comparison of Example 4 with the data stored in the
+  repository of the Perspective (ten samples of each antidiagonal cut, per diagram and for the sum, six scenarios), without
+  recomputing anything with QuDPy. QuDPy-FDGF, evaluated at the same ten points of the Perspective's time grid and fitted with
+  its estimator, reproduces the stored coherent half widths to 0.35 % on average (1.4 % at most, 48 values) and the amplitudes to
+  a few percent, with no parameter to tune. The stored action half widths (Table I: 8.63 and 11.0 meV against 5.16 and 7.10 meV
+  coherent) are reproduced to 0.4 % (1.4 % at most) by the four UFSS fluorescence diagrams with the excitation-number detector
+  when they are summed with the signs of the raw QuDPy diagrams; with the signs of the Liouville-space formalism the same four
+  diagrams give the coherent half widths, as the exact identity S_N = -i S_pol requires (the excited-state-absorption diagram
+  Q2b has the opposite sign in the stored sum). The PL projector of the paper gives 8.07 and 10.55 meV (coherent 5.16 and 7.10),
+  within 0.6 meV of Table I. The stored unbalanced scenario is compatible with a weight of the two-quantum states of about 0.45
+  in the detector, not with weights 2:1 on the one-quantum states. The ten-point estimator gives 5.16 and 7.10 meV for the
+  coherent signal where the same fit on a fine cut gives 5.63 and 7.25 meV.
 - `solver.steady_state(check_unique=None)`: the stationary state of the generator as a `DensityState`
   (`L rho = 0`, `Tr rho = 1`), from `(L + |r>><<1|) x = r` with `Tr r = 1`: dense LU or matrix-free GMRES
   (restart 100, 100 restart cycles unless `krylov_maxiter`, `ConvergenceError` beyond). Diagnostics in
