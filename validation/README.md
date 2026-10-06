@@ -39,6 +39,7 @@ The example notebooks write their models out in full so that each can be read al
 | `analysis/example1_analysis.ipynb` | Linewidth, waiting time, fluorescence window, selection rule of the fourth interaction, exact versus trapezoidal jump integral |
 | `analysis/example2_analysis.ipynb` | Convergence in the magnon cutoff, dense versus sparse agreement, GMRES iterations with and without the preconditioner |
 | `analysis/example3_analysis.ipynb` | Spectrum at η = 2 meV, pathway completeness, truncation at two excitations, harmonic-limit cancellation |
+| `analysis/example4_chi5_analysis.ipynb` | Closed limit of Example 4, fifth order: truncation independence of the third-order response, lines of the 2Q map, pathway orderings with and without the three-excitation manifold, truncation at two excitations, harmonic-limit cancellation, additivity of independent modes |
 | `analysis/example4_analysis.ipynb` | Comparison of Example 4 with the stored data of the Perspective repository (six scenarios): coherent and action half widths and amplitudes, sign convention of the action diagrams, excitation-number identity, unbalanced scenario, PL projector, estimator. Reads `results/data/perspective_comparison.json` |
 | `benchmarks/example1_benchmark.ipynb` | Dense versus sparse, frequency domain versus time sampling, original QuDPy |
 | `benchmarks/example2_benchmark.ipynb` | Dense versus sparse, scaling with chain length, GMRES iterations versus η |

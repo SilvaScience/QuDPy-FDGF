@@ -102,7 +102,7 @@ The second line is a rounding error, of the order of 1e-16 and platform dependen
 python -m pytest
 ```
 
-Expected: `237 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 4 tests).
+Expected: `245 passed` in about 25 s (a local `tests/consistency/` folder, if present, adds 4 tests).
 
 ## Examples, tests, and validation
 

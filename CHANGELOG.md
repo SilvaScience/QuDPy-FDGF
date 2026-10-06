@@ -131,6 +131,19 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   single pathway has the width of the declared rates to about 1 %. Results in `validation/results/data/example4.npz`.
   `tests/physics/test_action_number_identity.py` checks the identity (211 tests, plus 4 in the local
   `tests/consistency/`).
+- Closed limit of Example 4, fifth order: section 8 of `examples/example4_coupled_modes_detection.ipynb` takes the Hamiltonian
+  of Example 4 without dissipation on the ten states with n_a + n_b <= 3, generates the seven fifth-order 2Q pathways with
+  UFSS and computes the double-quantum map at eta = 2 meV (six lines, three per mode, at -(2 omega_m + Delta) and omega_m,
+  omega_m + Delta, omega_m + 2 Delta); the seven pathways cancel to 2e-13 when the anharmonicity is set to zero.
+  `validation/analysis/example4_chi5_analysis.ipynb` checks that the third-order response is the same on three truncations,
+  assigns the lines, shows that the mixed state |1,1> appears only through the coupling (1.3e-3 of the maximum at
+  J = 1 meV), compares the eight orderings of the last three interactions with and without the three-excitation manifold
+  (the all-Ku ordering needs it, the all-Bd ordering never occurs), measures the truncation at two excitations (the maximum
+  changes by 2 % and the complex spectrum by 94 % of the maximum), checks the harmonic limit (2e-13 at N_max = 3 and 4, 1.4 at
+  N_max = 2, 0.23 with three levels per mode) and that two independent modes add (2e-13). `validation/models.py` has
+  `example4_chi5_qobj`, `example4_chi5_model` and `example4_chi5_pathways`;
+  `tests/physics/test_closed_limit_two_modes.py` (4 tests, 245 in all) covers the cancellation, its dependence on the
+  truncation and the additivity. Results in `validation/results/data/example4_chi5.npz` and `example4_chi5_analysis.json`.
 - `validation/analysis/compare_perspective.py` and `example4_analysis.ipynb`: comparison of Example 4 with the data stored in the
   repository of the Perspective (ten samples of each antidiagonal cut, per diagram and for the sum, six scenarios), without
   recomputing anything with QuDPy. QuDPy-FDGF, evaluated at the same ten points of the Perspective's time grid and fitted with
