@@ -2,56 +2,86 @@
   {
     "eta_meV": 0.3,
     "D": 57,
+    "grid": [
+      3,
+      3
+    ],
     "preconditioner": "diagonal",
     "converged": true,
-    "relative_difference_to_dense": 2.5378598388166848e-15,
-    "time_s": 0.30529840011149645,
-    "solves": 54,
+    "relative_difference_to_dense": 1.2636404844643256e-15,
+    "solves": 6,
     "mean_iterations": 1.0,
-    "max_iterations": 1
+    "max_iterations": 1,
+    "relative_residual_max": 1.3789523065607657e-15,
+    "condition_estimate": 23.03434697329977,
+    "time_s": 0.009877599994069897
   },
   {
     "eta_meV": 0.1,
     "D": 57,
+    "grid": [
+      3,
+      3
+    ],
     "preconditioner": "diagonal",
     "converged": true,
-    "relative_difference_to_dense": 1.8952513400268346e-15,
-    "time_s": 0.282262499909848,
-    "solves": 54,
+    "relative_difference_to_dense": 2.0780167533574464e-15,
+    "solves": 6,
     "mean_iterations": 1.0,
-    "max_iterations": 1
+    "max_iterations": 1,
+    "relative_residual_max": 1.1217371830693825e-15,
+    "condition_estimate": 67.1030409198993,
+    "time_s": 0.009968399994249921
   },
   {
     "eta_meV": 0.03,
     "D": 57,
+    "grid": [
+      3,
+      3
+    ],
     "preconditioner": "diagonal",
     "converged": true,
-    "relative_difference_to_dense": 7.5891996690790045e-16,
-    "time_s": 0.2774603001307696,
-    "solves": 54,
+    "relative_difference_to_dense": 8.940306242718665e-16,
+    "solves": 6,
     "mean_iterations": 1.0,
-    "max_iterations": 1
+    "max_iterations": 1,
+    "relative_residual_max": 4.009373408385221e-15,
+    "condition_estimate": 221.3434697329977,
+    "time_s": 0.010847400000784546
   },
   {
     "eta_meV": 0.01,
     "D": 57,
+    "grid": [
+      3,
+      3
+    ],
     "preconditioner": "diagonal",
     "converged": true,
-    "relative_difference_to_dense": 1.0003432049774603e-15,
-    "time_s": 0.3776545999571681,
-    "solves": 54,
+    "relative_difference_to_dense": 3.0854971931753405e-15,
+    "solves": 6,
     "mean_iterations": 1.0,
-    "max_iterations": 1
+    "max_iterations": 1,
+    "relative_residual_max": 1.3550031499271179e-15,
+    "condition_estimate": 662.0304091989931,
+    "time_s": 0.009713400002510753
   },
   {
     "eta_meV": 0.003,
     "D": 57,
+    "grid": [
+      3,
+      3
+    ],
     "preconditioner": "diagonal",
     "converged": true,
-    "relative_difference_to_dense": 8.465952098471792e-16,
-    "time_s": 0.3296692001167685,
-    "solves": 54,
+    "relative_difference_to_dense": 4.493420725275315e-15,
+    "solves": 6,
     "mean_iterations": 1.0,
-    "max_iterations": 1
+    "max_iterations": 1,
+    "relative_residual_max": 6.346517574743979e-15,
+    "condition_estimate": 2204.4346973299766,
+    "time_s": 0.009601399993698578
   }
 ]

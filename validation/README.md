@@ -70,15 +70,17 @@ Run a script from anywhere, for example `python validation/benchmarks/scripts/be
 
 | Script | What it measures | Output | Time |
 |---|---|---|---|
-| `bench_example1_dense_sparse.py` | Dense versus sparse backend, Example 1 with its three observables, 41 x 41 grid | `example1_dense_sparse.json` | ~5 s |
-| `bench_example2_dense_sparse.py` | Dense versus sparse backend, Example 2 (D = 57), 5 x 5 grid | `example2_dense_sparse.json` | ~30 min |
-| `bench_example3_dense_sparse.py` | Dense versus sparse backend, Example 3 (fifth order, 7 pathways), 31 x 31 grid | `example3_dense_sparse.json` | ~20 s |
-| `bench_scaling.py` | Time and peak memory versus Hilbert dimension D, Example 2 enlarged from L = 4 to 8 sites (`diagonal` argument: preconditioned sparse runs up to L = 10), one process per case | `scaling.json`, `scaling_diagonal.json` | ~15 min |
+| `bench_example1_dense_sparse.py` | Dense versus sparse backend, pointwise versus factorized, Example 1 with its three observables, 41 x 41 grid | `example1_dense_sparse.json` | ~10 s |
+| `bench_example2_dense_sparse.py` | Dense versus sparse (plain GMRES and preconditioned) backend, pointwise versus factorized, Example 2 (D = 57), 5 x 5 grid; `skip-dense-pointwise` leaves out the slow dense run | `example2_dense_sparse.json` | ~40 min (~3 min without the dense pointwise run) |
+| `bench_example3_dense_sparse.py` | Dense versus sparse backend, pointwise versus factorized, Example 3 (fifth order, 7 pathways), 31 x 31 grid, and the factorized 151 x 151 map | `example3_dense_sparse.json` | ~20 s |
+| `bench_grid_size.py` | Time and resolvent solves versus the number of grid points per axis N, pointwise versus factorized, Examples 1 to 3 | `grid_size.json` | ~10 min |
+| `bench_scaling.py` | Time and peak memory versus Hilbert dimension D, Example 2 enlarged from L = 4 to 10 sites, 9 x 9 grid; four configurations (`dense`, `sparse_plain`, `sparse`, `sparse_pointwise`; one argument runs one of them), one process per case | `scaling.json` | ~10 min |
 | `bench_generator_action.py` | One application of the Liouvillian, matrix products versus one call per column (D = 57 and 163), and a 2 x 2 spectrum at D = 57 | `generator_action.json` | ~1 min |
 | `bench_preconditioner_dissipative.py` | Diagonal preconditioner versus plain GMRES on dissipative models with a diagonal H (three-site chain, six-site XXZ chain with collective decay or local dephasing, rates from weak to far above the energy scale); the basis of the `auto` choice | `preconditioner_dissipative.json` | ~8 min |
-| `bench_gmres_eta.py` | GMRES iterations per resolvent solve versus η, D = 57 (`diagonal` argument: with the preconditioner) | `gmres_eta.json`, `gmres_eta_diagonal.json` | ~3 min |
+| `bench_gmres_eta.py` | GMRES iterations per resolvent solve versus η, D = 57, 3 x 3 grid (`diagonal` argument: with the preconditioner) | `gmres_eta.json`, `gmres_eta_diagonal.json` | ~3 min |
 | `bench_time_fft.py` | Frequency domain versus time sampling + transform, two-level system, three linewidths, targets 1e-2 to 1e-4 | `time_fft.json` | ~5 min |
 | `bench_time_fft_ex3.py` | Same comparison for Example 3, at η = 8 and 2 meV, with an extrapolation for the original QuDPy | `time_fft_ex3.json` | ~5 min |
+| `bench_resolved_map.py` | Resolved maps at equal resolution (grid spacing a quarter of the line width): direct evaluation, sum over states, and the cheapest factorized time route (matrix transform or zero-padded FFT, bandpass sampling) for targets 1e-2 to 1e-4; Example 1 at three linewidths and Example 3 at η = 8 and 2 meV (`example1` or `example3` argument) | `resolved_map.json` | ~25 min |
 | `bench_qudpy_original.py` | One case of the comparison with the original QuDPy (`System.coherence2d`, QuTiP `mesolve`) at given (dt, T) | one JSON line | seconds to minutes |
 | `bench_qudpy_series.py` | Runs the original-QuDPy cases one after another, including tighter `mesolve` tolerances | `qudpy_original.json` | ~15 min |
 | `check_models.py` | Checks that `models.py` reproduces the published numbers of Examples 2 and 3 | `models_check.json` | ~1 min |
@@ -94,9 +96,11 @@ Run a script from anywhere, for example `python validation/benchmarks/scripts/be
 
 ## Notes on the comparisons
 
-- The number of GMRES iterations is not recorded by the solver. The scripts and the analysis
-  notebook wrap the `gmres` call of the sparse backend with a counting callback; the solver code is
-  not modified.
+- The iterations of the sparse backend come from the solver itself (`result.diagnostics["solver"]`:
+  number of solves, mean and maximum iterations, true relative residual); the scripts no longer
+  wrap `gmres`. The grid is evaluated with `strategy="auto"` (factorized for two or more scanned axes)
+  unless a script says `pointwise`; `preconditioner="auto"` is the default of the sparse backend, and
+  the scripts that need plain GMRES pass `preconditioner=None`.
 - In the time-domain comparisons, the time signal is transformed with the kernel
   `exp[(i omega - eta) t]` and trapezoidal weights directly on the requested frequency grid, so
   the transform adds no error of its own.

@@ -5,11 +5,51 @@
     31,
     31
   ],
+  "full_grid": [
+    151,
+    151
+  ],
   "eta": 0.008,
-  "time_dense_s": 2.0096924998797476,
-  "time_sparse_s": 15.633296900196001,
+  "runs": {
+    "dense_pointwise_31x31": {
+      "time_s": 1.3983472999971127,
+      "resolvent_solves": 13454,
+      "propagations": 20181
+    },
+    "dense_factorized_31x31": {
+      "time_s": 0.010468699998455122,
+      "resolvent_solves": 124,
+      "propagations": 187
+    },
+    "dense_factorized_151x151": {
+      "time_s": 0.06043420000059996,
+      "resolvent_solves": 604,
+      "propagations": 907
+    },
+    "sparse_sector_pointwise_31x31": {
+      "time_s": 2.2257724000010057,
+      "resolvent_solves": 13454,
+      "propagations": 187
+    },
+    "sparse_sector_factorized_31x31": {
+      "time_s": 0.09813140000187559,
+      "resolvent_solves": 124,
+      "propagations": 187
+    },
+    "sparse_sector_factorized_151x151": {
+      "time_s": 0.3150108000045293,
+      "resolvent_solves": 604,
+      "propagations": 907
+    }
+  },
+  "time_dense_s": 0.010468699998455122,
+  "time_sparse_s": 0.09813140000187559,
   "relative_difference": {
-    "polarization_h": 2.496085960560549e-14,
-    "polarization_l": 2.5832046613619036e-14
+    "polarization_h": 4.920159969851192e-14,
+    "polarization_l": 3.4755017471750474e-14
+  },
+  "strategy_difference": {
+    "dense": 2.4148036359371543e-16,
+    "sparse_sector": 5.750327685217565e-14
   }
 }

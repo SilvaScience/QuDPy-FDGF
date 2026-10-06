@@ -5,12 +5,67 @@
     5
   ],
   "eta_meV": 0.03,
-  "time_dense_s": 1413.5398671999574,
-  "time_sparse_s": 245.2459468001034,
-  "relative_difference": {
-    "GSB": 5.686440654851739e-11,
-    "SE": 5.6864394366223335e-11,
-    "ESA": 1.96748787184172e-11
+  "runs": {
+    "dense_factorized": {
+      "time_s": 16.19566710000072,
+      "resolvent_solves": 10,
+      "resolvent_factorizations": 10,
+      "iterations_mean": null,
+      "preconditioner": null
+    },
+    "dense_pointwise": {
+      "time_s": 928.8671164999978,
+      "resolvent_solves": 150,
+      "resolvent_factorizations": 150,
+      "iterations_mean": null,
+      "preconditioner": null
+    },
+    "sparse_plain_factorized": {
+      "time_s": 2.090657499997178,
+      "resolvent_solves": 10,
+      "resolvent_factorizations": 0,
+      "iterations_mean": 1179.0,
+      "preconditioner": null
+    },
+    "sparse_plain_pointwise": {
+      "time_s": 18.480623399998876,
+      "resolvent_solves": 150,
+      "resolvent_factorizations": 0,
+      "iterations_mean": 706.98,
+      "preconditioner": null
+    },
+    "sparse_factorized": {
+      "time_s": 0.011398099995858502,
+      "resolvent_solves": 10,
+      "resolvent_factorizations": 0,
+      "iterations_mean": 1.0,
+      "preconditioner": "diagonal"
+    },
+    "sparse_pointwise": {
+      "time_s": 0.07945569999719737,
+      "resolvent_solves": 150,
+      "resolvent_factorizations": 0,
+      "iterations_mean": 1.0,
+      "preconditioner": "diagonal"
+    }
   },
-  "worst": 5.686440654851739e-11
+  "time_dense_s": 16.19566710000072,
+  "time_sparse_s": 0.011398099995858502,
+  "time_sparse_plain_s": 2.090657499997178,
+  "relative_difference": {
+    "GSB": 9.16540314288776e-16,
+    "SE": 9.16540314288776e-16,
+    "ESA": 9.900719865100178e-16
+  },
+  "relative_difference_plain": {
+    "GSB": 5.715898018224889e-11,
+    "SE": 5.7158980653349846e-11,
+    "ESA": 3.5525838692142725e-11
+  },
+  "strategy_difference": {
+    "dense": 5.123616117171815e-16,
+    "sparse_plain": 3.381096842300355e-11,
+    "sparse": 2.714246733110828e-15
+  },
+  "worst": 5.7158980653349846e-11
 }

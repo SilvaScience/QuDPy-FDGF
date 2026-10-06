@@ -72,6 +72,25 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   columns; the dense backend builds its transition and observable matrices with one product.
 - `generators.operator_matmat` and `operator_rmatmat` apply an operator to a matrix.
 
+### Benchmarks
+- All benchmarks of `validation/benchmarks` are recomputed with the factorized evaluation, the vectorized action of
+  the generator and the `auto` preconditioner, and the notebooks `example{1,2,3}_benchmark.ipynb` and
+  `validation/analysis/example2_analysis.ipynb` read the new results. `bench_scaling.py` measures four
+  configurations (dense, plain GMRES, default, default point by point) on a 9 x 9 grid up to D = 386 (peak memory
+  above the baseline of the process); `bench_grid_size.py` (new) measures time and solves against the number of grid
+  points (log-log slope of the solves 1.00 factorized against 2.00 pointwise; of the time 0.5 to 1.2 against 1.9 to
+  2.0); `bench_gmres_eta.py` and the dense-versus-sparse scripts read `result.diagnostics["solver"]`.
+- `bench_resolved_map.py` (new): the cost of a *resolved* map at equal resolution (grid spacing a quarter of the
+  line width) for the direct evaluation, the sum over states and a time route that is factorized as well (matrix
+  transform or zero-padded FFT, bandpass sampling, cheapest (dt, T) that reaches 1e-2, 1e-3 and 1e-4). Result: the
+  direct evaluation is comparable to the time route at 1e-2 for strongly damped lines and 4 to 150 times faster at
+  1e-3 to 1e-4; the sum over states is faster than both for small models. At D = 386 the factorized strategy divides
+  the time by 14 and multiplies the memory by 5 (2.8 s and 238 MB against 38.7 s and 47 MB point by point).
+- The earlier claims "x260 from the preconditioner" and "8 to 400 times faster than time propagation" are withdrawn:
+  the diagonal preconditioner of a closed model in its eigenbasis is the exact inverse (a sum over states), and
+  the comparison with the original QuDPy (136 to 13 838 times, 41 x 41 grid) is against a code that integrates each
+  pair of delays separately.
+
 ### Added
 - `solver.steady_state(check_unique=None)`: the stationary state of the generator as a `DensityState`
   (`L rho = 0`, `Tr rho = 1`), from `(L + |r>><<1|) x = r` with `Tr r = 1`: dense LU or matrix-free GMRES
