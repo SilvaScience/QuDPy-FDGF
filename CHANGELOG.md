@@ -131,6 +131,18 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   single pathway has the width of the declared rates to about 1 %. Results in `validation/results/data/example4.npz`.
   `tests/physics/test_action_number_identity.py` checks the identity (211 tests, plus 4 in the local
   `tests/consistency/`).
+- `validation/pulses.py`: time-domain calculation of the third-order rephasing signal of a closed system driven by Gaussian
+  pulses of finite duration, independent of the resolvent formalism (hierarchy of the multilinear terms of the three pulses,
+  interaction picture, RK4; the free evolution after the pulses is integrated analytically; rotating-wave or real field).
+  It agrees with a non-perturbative propagation with phase cycling and amplitude extrapolation to 1.5e-7 (rotating-wave
+  field) and 4.4e-7 (real field) with overlapping pulses, and with QuDPy-FDGF in the impulsive limit (pulses of 0.02 meV^-1)
+  to 2e-3. `validation/analysis/example2_pulses.py` computes the 60 x 60 map of the thermal XXZ chain for pulse durations
+  from 0.02 to 3 meV^-1 (resumable; one file per map in `validation/results/cache/`), for the error of the impulsive limit and
+  of the rotating-wave approximation at THz frequencies. `tests/physics/test_finite_pulses.py` (2 tests, 250 in all).
+- `validation/benchmarks/scripts/bench_qudpy_perspective.py` and `..._series.py`: original QuDPy (public `coherence2d`,
+  four interactions for the action diagrams) against QuDPy-FDGF on the coupled modes of Example 4, at the grid of the
+  Perspective and at a resolved grid; resumable (cases already in `results/data/qudpy_perspective.json` are skipped, the
+  propagated signals are kept per diagram in `results/cache/qudpy_perspective`).
 - Example 2 (thermal XXZ chain): the notebook computes the complete rephasing response with the eight sequences of
   `pathways_from_signature("-++")` (three are non-zero for the ground state, the five others are activated by the
   thermal state and add 4.4 % of the maximum at 4 K; the scan takes 0.1 s with the exact diagonal solve, 139 s before),
