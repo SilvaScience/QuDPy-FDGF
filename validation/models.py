@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import qutip as qt
 from qudpy_fdgf import (EigenbasisKModel, ExcitationSectorModel, FrequencyPathway,
-                        ThermodynamicContext, standard_nq_protocol)
+                        ThermodynamicContext, pathways_from_signature, standard_nq_protocol)
 
 # ============================================================================= locations
 ROOT = Path(__file__).resolve().parent
@@ -81,6 +81,9 @@ EX2_PATHWAYS = (
     FrequencyPathway(name="ESA", interactions=("Bu", "Ku", "Ku"), component="rephasing"),
 )
 EX2_PROTOCOL = EX1_PROTOCOL
+# The complete rephasing response has eight sequences (first interaction Bu or Kd, then two of Ku and Bd). Three are non-zero
+# for the ground state (GSB, SE, ESA, EX2_PATHWAYS); the thermally populated sectors activate the five others.
+EX2_PATHWAYS_ALL = tuple(pathways_from_signature("-++", component="rephasing"))
 
 
 def example2_chain(n_sites=None, **parameters):
@@ -129,6 +132,42 @@ def example2_context(temperature=None):
 
 def example2_dimension(n_sites, max_magnons):
     return sum(comb(n_sites, n) for n in range(max_magnons + 1))
+
+
+def example2_bimagnon(n_sites=None, **parameters):
+    """Two-magnon levels of the ring by total momentum K = 2 pi m / L: {m: (energies, nearest-neighbour probabilities)}.
+
+    P_nn = <sum_j n_j n_(j+1)> is the probability that two magnons are on neighbouring sites (0.4 for the uncorrelated pair
+    of a six-site ring). The levels of each sector are sorted; the lowest level of K = 0 is the bimagnon seen by the uniform
+    probe, the next one is the first scattering level of that sector.
+    """
+    L = EX2["n_sites"] if n_sites is None else n_sites
+    H, N_op, _ = example2_chain(L, **parameters)
+    magnons = np.rint(N_op.diag().real).astype(int)
+    two = np.flatnonzero(magnons == 2)
+    H2 = H.full()[np.ix_(two, two)]
+
+    def translated(index):
+        bits = [(index >> (L - 1 - j)) & 1 for j in range(L)]
+        bits = bits[-1:] + bits[:-1]
+        return sum(bit << (L - 1 - j) for j, bit in enumerate(bits))
+
+    translation = np.zeros((2**L, 2**L))
+    for index in range(2**L):
+        translation[translated(index), index] = 1.0
+    T2 = translation[np.ix_(two, two)]
+    occupation = [np.array([(index >> (L - 1 - j)) & 1 for index in range(2**L)], dtype=float) for j in range(L)]
+    P_nn = np.diag(sum(occupation[j] * occupation[(j + 1) % L] for j in range(L)))[np.ix_(two, two)]
+    levels = {}
+    for m in range(L):
+        phase = np.exp(2j * np.pi * m / L)
+        projector = sum(np.linalg.matrix_power(T2, k) * phase ** (-k) for k in range(L)) / L
+        weights, vectors = np.linalg.eigh((projector + projector.conj().T) / 2)
+        basis = vectors[:, weights > 0.5]
+        energies, states = np.linalg.eigh(basis.conj().T @ H2 @ basis)
+        pairs = [np.real(states[:, i].conj() @ basis.conj().T @ P_nn @ basis @ states[:, i]) for i in range(energies.size)]
+        levels[m] = (energies, np.array(pairs))
+    return levels
 
 
 # ============================================================================= Example 3

@@ -131,6 +131,15 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   single pathway has the width of the declared rates to about 1 %. Results in `validation/results/data/example4.npz`.
   `tests/physics/test_action_number_identity.py` checks the identity (211 tests, plus 4 in the local
   `tests/consistency/`).
+- Example 2 (thermal XXZ chain): the notebook computes the complete rephasing response with the eight sequences of
+  `pathways_from_signature("-++")` (three are non-zero for the ground state, the five others are activated by the
+  thermal state and add 4.4 % of the maximum at 4 K; the scan takes 0.1 s with the exact diagonal solve, 139 s before),
+  and locates the bimagnon by total momentum: at K = 0 the lowest level (2.1108 meV, P_nn = 0.67) lies 0.4475 meV below
+  the first scattering level (2.5583 meV, P_nn = 0.29) and 0.434 meV below the free pair 2 omega(2 pi / L); the distance
+  to 2 omega(0), -0.134 meV, is the displacement of the ESA line from the bright line, not a binding energy.
+  `models.EX2_PATHWAYS_ALL` and `models.example2_bimagnon`; `example2.npz` stores the eight maps (`rephasing` is their
+  sum, `rephasing_three` the sum of GSB, SE and ESA); `analysis/example2_analysis.ipynb` uses the eight sequences
+  (cutoff errors 6.4e-2, 4.3e-3, 2.4e-4 at N_max = 2, 3, 4); `tests/physics/test_chain_bimagnon.py` (3 tests, 248 in all).
 - Closed limit of Example 4, fifth order: section 8 of `examples/example4_coupled_modes_detection.ipynb` takes the Hamiltonian
   of Example 4 without dissipation on the ten states with n_a + n_b <= 3, generates the seven fifth-order 2Q pathways with
   UFSS and computes the double-quantum map at eta = 2 meV (six lines, three per mode, at -(2 omega_m + Delta) and omega_m,
