@@ -15,6 +15,7 @@ from scipy.linalg.lapack import zgecon
 
 from .base import BackendBase
 from ..capabilities import BackendCapabilities, Capabilities
+from ..exceptions import ConvergenceError
 from ..observables import ObservableSpec
 from ..results import PathwayResult
 
@@ -337,6 +338,10 @@ class DenseLiouvilleBackend(BackendBase):
         cached = self._integrated_detector_cache.get(key)
         if cached is not None:
             return cached
+        if np.isinf(stop):
+            integrated = self._infinite_window_detector(spec)
+            self._integrated_detector_cache[key] = integrated
+            return integrated
         matrix = self._observable_matrix(spec.instantaneous().without_projection())
         vector = matrix.conj().T.reshape(-1, order="F")
         size = vector.size
@@ -350,6 +355,24 @@ class DenseLiouvilleBackend(BackendBase):
         integrated = np.asarray(integrated, dtype=np.complex128)
         self._integrated_detector_cache[key] = integrated
         return integrated
+
+    def _solve_excess_integral(self, right_hand_side, rho_ss, identity):
+        """Dense LU of ``L^dagger - |1>><<rho_ss|``; an ill-conditioned matrix means a degenerate kernel."""
+        matrix = self._A_dense.conj().T - np.outer(identity, np.conj(rho_ss))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", LinAlgWarning)
+            factors = lu_factor(matrix, check_finite=False)
+        norm = float(np.linalg.norm(matrix, 1))
+        reciprocal = float(zgecon(factors[0], norm, norm="1")[0])
+        if np.finfo(float).eps / max(reciprocal, np.finfo(float).tiny) > 1e-6:
+            raise ConvergenceError(
+                "The stationary state of the generator is not unique or the generator is singular on the "
+                "complement of its stationary state: the infinite-window count is not defined."
+            )
+        return lu_solve(factors, right_hand_side, check_finite=False)
+
+    def _evolve_adjoint(self, vector, time):
+        return expm(time * self._A_dense.conj().T) @ vector
 
     def _integrated_jump_trapezoid(self, response, spec):
         """Legacy quadrature over n_steps samples of the window."""

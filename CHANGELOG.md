@@ -108,6 +108,17 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   pair of delays separately.
 
 ### Added
+- Fluorescence on an infinite window: `ObservableSpec.mean_jump(..., time_window=(t0, np.inf))`. The count rate of a
+  state tends to `Tr(M rho_ss) Tr(rho)`, so the solver integrates the excess over that stationary background,
+  `X = exp(t0 L^+) x` with `(L^+ - |1><<rho_ss|) x = -(m - P m)`, `m = vec(M^+)`, `P m = conj(Tr(M rho_ss)) vec(1)`:
+  one dense LU (dense backend) or one GMRES solve (sparse backend, as stiff as the relaxation gap) with the adjoint
+  generator, cached per channel and window. When the stationary state has no jumps (zero temperature, decay to the
+  ground state) the result is the total count, the quantum yield. It needs a unique stationary state: a degenerate
+  kernel raises a `ConvergenceError` (dense backend; the sparse solve may fail to converge); `integration="trapezoid"`
+  with an infinite window is a `ValueError`. Tests in `tests/physics/test_infinite_window.py`: the yield of the open
+  two-level system is 1 to 1e-9, a non-counted channel gives gamma_r / (gamma_r + gamma_nr), a window starting at t0
+  keeps exp(-Gamma t0), the limit of long finite windows, the subtraction of a nonzero background (uphill channel),
+  on both backends. Example 1 shows the yield.
 - Example 4 (`examples/example4_coupled_modes_detection.ipynb`, model in `validation/models.py`): two coupled
   anharmonic bosonic modes with three levels each (D = 9) and seven GKSL channels (pure dephasing, relaxation
   cascade, downhill population transfer, radiative decay), after the two-mode model of the Perspective on

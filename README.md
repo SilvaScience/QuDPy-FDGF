@@ -102,7 +102,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `221 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 4 tests).
+Expected: `237 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 4 tests).
 
 ## Examples, tests, and validation
 
@@ -620,6 +620,10 @@ solver.feed_model(model)
   models measured (up to a 23 % increase at a dephasing rate of 10 meV, far above the 1 meV scale of the
   chain). `"diagonal"` forces it and `None` gives plain GMRES; the choice is in `backend.preconditioner` and
   `diagnostics["solver"]["preconditioner"]`;
+- integrated jump counts (fluorescence) over a finite window or, with `time_window=(t0, np.inf)`, over an infinite
+  one: the excess over the stationary count rate (the total count when the stationary state has no jumps, the quantum
+  yield), from one linear solve with the adjoint generator on the complement of the stationary state; it needs a
+  unique stationary state;
 - exact diagonal solve: when the generator is exactly diagonal in the dyad basis (diagonal Hamiltonian blocks
   and diagonal collapse operators: a closed model in its eigenbasis, pure dephasing), `diagonal_solve=True`
   (default) solves every shifted system, and the Hilbert resolvent of a diagonal Hamiltonian, by an

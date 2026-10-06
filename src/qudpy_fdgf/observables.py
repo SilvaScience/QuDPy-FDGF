@@ -30,6 +30,8 @@ class ObservableSpec:
     time_window: tuple[float, float] | None = None
     n_steps: int = 101
     fourth_interaction: object = None
+    # time_window=(t0, numpy.inf): counts above the stationary background rate, see
+    # BackendBase._infinite_window_detector.
     # "exact": integrated detector computed once in the Heisenberg picture;
     # "trapezoid": legacy quadrature over n_steps samples of the window.
     integration: str = "exact"
@@ -77,8 +79,10 @@ class ObservableSpec:
                     "integrated_jump must provide time_window=(t0, tf)."
                 )
             window = tuple(float(value) for value in window)
-            if not all(math.isfinite(value) for value in window):
-                raise ValueError("time_window must contain finite values.")
+            if not math.isfinite(window[0]) or math.isnan(window[1]):
+                raise ValueError(
+                    "time_window must start at a finite time and end at a finite time or at numpy.inf."
+                )
             if window[0] < 0.0 or window[1] < window[0]:
                 raise ValueError(
                     "time_window must satisfy 0 <= t0 <= tf."
@@ -92,6 +96,8 @@ class ObservableSpec:
         integration = str(self.integration).lower()
         if integration not in {"exact", "trapezoid"}:
             raise ValueError("integration must be 'exact' or 'trapezoid'.")
+        if window is not None and math.isinf(window[1]) and integration == "trapezoid":
+            raise ValueError("An infinite time window needs integration='exact': the trapezoid rule cannot sample it.")
         object.__setattr__(self, "integration", integration)
 
         projections = self.fourth_interaction

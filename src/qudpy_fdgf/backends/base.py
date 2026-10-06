@@ -7,7 +7,7 @@ backends can focus on propagation and resolvent algorithms.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import inspect
 import warnings
 
@@ -24,7 +24,7 @@ from ..contracts import (
     PureState,
     ThermodynamicContext,
 )
-from ..exceptions import ModelConsistencyWarning, ModelContractError, SectorError
+from ..exceptions import ConvergenceError, ModelConsistencyWarning, ModelContractError, SectorError
 from ..generators import EvolutionGenerator, operator_matmat, operator_rmatmat
 from ..observables import ObservableSpec
 
@@ -332,6 +332,56 @@ class BackendBase(ABC):
         )
         return rho, info
 
+    def stationary_vector(self):
+        """Stationary density matrix of the generator, column-stacked and cached; an error if it is not unique."""
+        cached = getattr(self, "_stationary_cache", None)
+        if cached is None:
+            rho, info = self.steady_state()
+            if info.get("unique") is False:
+                raise ConvergenceError(
+                    "An infinite time window needs a generator with a unique stationary state: the kernel of the "
+                    "generator is larger than one (a closed model, conserved quantities, a sector without relaxation). "
+                    "Use a finite window or add relaxation."
+                )
+            cached = rho.reshape(-1, order="F")
+            self._stationary_cache = cached
+        return cached
+
+    def _solve_excess_integral(self, right_hand_side, rho_ss, identity):
+        """Solve ``(L^dagger - |1>><<rho_ss|) x = right_hand_side`` (see ``_infinite_window_detector``)."""
+        raise NotImplementedError(
+            f"Backend {self.name!r} does not integrate jump counts over an infinite window."
+        )
+
+    def _evolve_adjoint(self, vector, time):
+        """``exp(L^dagger t)`` applied to a vector."""
+        raise NotImplementedError(
+            f"Backend {self.name!r} does not integrate jump counts over an infinite window."
+        )
+
+    def _infinite_window_detector(self, spec):
+        """Window ``(t0, inf)`` -> ``X = int_{t0}^inf [exp(s L^dagger) m - P m] ds``, ``<<X|rho>>`` the excess count.
+
+        ``m = vec(M^dagger)`` is the detector of the channel, ``M = gamma L^dagger L``. The count rate of a
+        state tends to ``Tr(M rho_ss) Tr(rho)`` as time goes to infinity, so the integral over an infinite window
+        diverges unless that stationary background is subtracted: ``P m = conj(Tr(M rho_ss)) vec(1)``. The excess
+        is ``X = exp(t0 L^dagger) x`` with ``x = int_0^inf exp(s L^dagger)(m - P m) ds``, which solves
+        ``L^dagger x = -(m - P m)`` with ``<<rho_ss|x>> = 0``, that is ``(L^dagger - |1>><<rho_ss|) x = -(m - P m)``;
+        the matrix is invertible when the stationary state is unique. When the stationary state has no jumps
+        (zero temperature, decay to the ground state) ``P m = 0`` and ``<<X|rho>>`` is the total count, the
+        quantum yield of the state. Needs a unique stationary state.
+        """
+        start = spec.time_window[0]
+        detector = replace(spec.instantaneous().without_projection(), efficiency=1.0)
+        vector = self.detector_vector(detector)
+        rho_ss = self.stationary_vector()
+        identity = np.eye(self.layout.total_dimension, dtype=np.complex128).reshape(-1, order="F")
+        background = np.conj(np.vdot(vector, rho_ss)) * identity
+        solution = self._solve_excess_integral(-(vector - background), rho_ss, identity)
+        if start > 0.0:
+            solution = self._evolve_adjoint(solution, start)
+        return np.asarray(solution, dtype=np.complex128)
+
     def density_state(self, rho, *, metadata=None):
         """Density matrix in the layout order -> ``DensityState`` of its non-negligible sector blocks."""
         blocks = {}
@@ -363,6 +413,7 @@ class BackendBase(ABC):
         ``initial_state`` (a ``DensityState`` or a ``PureState``) replaces the reference state that
         the model would supply; the model is then not asked for it.
         """
+        self._stationary_cache = None
         required = (
             "sectors",
             "dimension",

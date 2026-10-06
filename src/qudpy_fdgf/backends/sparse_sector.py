@@ -592,6 +592,10 @@ class SparseSectorBackend(BackendBase):
         cached = self._integrated_detector_cache.get(key)
         if cached is not None:
             return cached
+        if np.isinf(stop):
+            integrated = self._infinite_window_detector(spec)
+            self._integrated_detector_cache[key] = integrated
+            return integrated
         vector = self._detector_vector(spec.instantaneous().without_projection())
         size = vector.size
         generator = self._liouville            # matvec: A, rmatvec: A^dagger
@@ -634,6 +638,40 @@ class SparseSectorBackend(BackendBase):
             )
         self._integrated_detector_cache[key] = integrated
         return integrated
+
+    def _solve_excess_integral(self, right_hand_side, rho_ss, identity):
+        """GMRES on ``L^dagger - |1>><<rho_ss|``, as stiff as the relaxation gap of the generator."""
+        size = right_hand_side.size
+        generator = self._liouville
+        operator = LinearOperator(
+            (size, size),
+            dtype=np.complex128,
+            matvec=lambda value: generator.rmatvec(value) - identity * np.vdot(rho_ss, value),
+        )
+        solution, info = gmres(
+            operator,
+            right_hand_side,
+            rtol=self.krylov_tolerance,
+            atol=0.0,
+            restart=min(100, size),
+            maxiter=100 if self.krylov_maxiter is None else self.krylov_maxiter,
+        )
+        if info != 0:
+            raise ConvergenceError(
+                "GMRES did not converge for the infinite-window count: the relaxation gap of the generator is "
+                "probably too small for this solver, or the stationary state is not unique. Raise krylov_maxiter, "
+                "use the dense backend for a small model, or use a finite window."
+            )
+        return solution
+
+    def _evolve_adjoint(self, vector, time):
+        heisenberg = LinearOperator(
+            (vector.size, vector.size),
+            dtype=np.complex128,
+            matvec=self._liouville.rmatvec,
+            rmatvec=self._liouville.matvec,
+        )
+        return expm_multiply(time * heisenberg, vector, traceA=0.0)
 
     def _integrated_jump_trapezoid(self, response, spec):
         """Legacy quadrature over n_steps samples of the window."""
