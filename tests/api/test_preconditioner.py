@@ -47,9 +47,9 @@ def test_generator_diagonal_matches_the_dense_generator():
 def test_spectra_are_unchanged(dissipative):
     reference = spectrum(three_site_chain(dissipative), "dense")
     plain = spectrum(three_site_chain(dissipative), "sparse_sector", krylov_tolerance=1e-12,
-                     preconditioner=None)
+                     preconditioner=None, diagonal_solve=False)
     preconditioned = spectrum(three_site_chain(dissipative), "sparse_sector",
-                              krylov_tolerance=1e-12, preconditioner="diagonal")
+                              krylov_tolerance=1e-12, preconditioner="diagonal", diagonal_solve=False)
     scale = np.max(np.abs(reference))
     assert np.max(np.abs(plain - reference)) / scale < 1e-9
     assert np.max(np.abs(preconditioned - reference)) / scale < 1e-9
@@ -57,7 +57,7 @@ def test_spectra_are_unchanged(dissipative):
 
 def test_closed_model_in_its_eigenbasis_needs_one_iteration():
     result = run(three_site_chain(dissipative=False), "sparse_sector",
-                 krylov_tolerance=1e-12, preconditioner="diagonal")
+                 krylov_tolerance=1e-12, preconditioner="diagonal", diagonal_solve=False)
     info = result.diagnostics["solver"]
     assert info["solves"] > 0 and info["iterations_max"] == 1
 
@@ -73,8 +73,8 @@ def test_dissipation_needs_fewer_iterations():
 def test_hilbert_resolvent_is_unchanged():
     solvers = {}
     for name, option in (("plain", None), ("diagonal", "diagonal")):
-        solvers[name] = SpectroscopySolver(backend="sparse_sector", eta=ETA,
-                                           krylov_tolerance=1e-12, preconditioner=option)
+        solvers[name] = SpectroscopySolver(backend="sparse_sector", eta=ETA, krylov_tolerance=1e-12,
+                                           preconditioner=option, diagonal_solve=False)
         solvers[name].feed_model(three_site_chain(dissipative=False))
     vector = np.random.default_rng(1).normal(size=solvers["plain"].backend.layout.total_dimension)
     for omega in (1.95, 2.01, 4.05):

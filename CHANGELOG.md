@@ -33,6 +33,16 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   A model that ran in eV with a thermal state must now say `energy_unit="eV"`.
 
 ### Changed
+- Exact diagonal solve (`SparseSectorBackend(diagonal_solve=True)`, default). When the generator is exactly
+  diagonal in the dyad basis (diagonal Hamiltonian blocks, collapse operators that are diagonal blocks: a closed
+  model in its eigenbasis, pure dephasing), every shifted system is solved by the element-wise division
+  `b / [(eta - i omega) - L_xy]` instead of GMRES, and the Hilbert resolvent of a diagonal Hamiltonian by
+  `b / [(omega + i eta) - E_x]`: the sum over states, exact to rounding, no iteration. Spectra agree with the dense
+  backend (explicit inverse) to 1e-12 and with GMRES to 1e-9. `backend.generator_is_diagonal` reports the test;
+  `diagnostics["solver"]["method"]` is `"diagonal"` with `"exact": True` (no `iterations_*`, no residual) instead of
+  `"gmres"`. `diagonal_solve=False` keeps GMRES with the preconditioner (the tests of the preconditioner use it).
+  Models with a collapse operator that moves population or couples coherences, or with matrix-free blocks, are
+  unchanged. Example 2 at D = 386, 9 x 9 grid: 2.8 s before, 1.6 s now (default configuration).
 - GMRES restart (no change): `resolvent_restart` keeps SciPy's default (20). Measured on unpreconditioned solves of
   the thermal XXZ chain, restart 20/50/100/200 gives 673/321/134/102 iterations (0.12/0.09/0.06/0.06 s) at
   D = 57, eta = 0.03 meV; 5688/3539/1895/128 (0.99/0.98/0.87/0.08 s) at eta = 0.003 meV; but 1210/1081/939/798

@@ -83,7 +83,7 @@ class SiteBasisModel:
 
 
 def test_closed_model_in_its_eigenbasis_gets_the_diagonal_preconditioner():
-    solver = chosen(three_site_chain(dissipative=False))
+    solver = chosen(three_site_chain(dissipative=False), diagonal_solve=False)       # GMRES, to see the preconditioner
     assert solver.backend.preconditioner == "diagonal"
     assert solver.backend.preconditioner_option == "auto"
     result = spectrum(solver)
@@ -92,7 +92,7 @@ def test_closed_model_in_its_eigenbasis_gets_the_diagonal_preconditioner():
 
 
 def test_diagonal_collapse_operators_keep_the_generator_diagonal():
-    solver = chosen(EigenbasisKModel(H, MU, c_ops_raw=((SIGMA_Z, 0.015),)))            # pure dephasing in the eigenbasis
+    solver = chosen(EigenbasisKModel(H, MU, c_ops_raw=((SIGMA_Z, 0.015),)), diagonal_solve=False)   # pure dephasing in the eigenbasis
     assert solver.backend.preconditioner == "diagonal"
     assert spectrum(solver).diagnostics["solver"]["iterations_max"] == 1
 

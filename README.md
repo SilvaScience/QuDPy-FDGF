@@ -102,7 +102,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `211 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 4 tests).
+Expected: `221 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 4 tests).
 
 ## Examples, tests, and validation
 
@@ -614,11 +614,18 @@ solver.feed_model(model)
 - diagonal preconditioner for the GMRES solves: `preconditioner="auto"` (default) switches it on when the
   Hamiltonian blocks are diagonal blocks of single sectors (the eigenbasis the model adapters provide)
   and off otherwise (site basis, couplings between sectors, matrix-free blocks). It is exact, hence one
-  iteration per solve, for a closed model or diagonal collapse operators (pure dephasing); with collapse
+  iteration per solve, for a closed model or diagonal collapse operators (pure dephasing), and those solves
+  are then done by division (next item); with collapse
   operators that couple coherences it is approximate but still divides the iterations by 1.3 to 3000 in the
   models measured (up to a 23 % increase at a dephasing rate of 10 meV, far above the 1 meV scale of the
   chain). `"diagonal"` forces it and `None` gives plain GMRES; the choice is in `backend.preconditioner` and
   `diagnostics["solver"]["preconditioner"]`;
+- exact diagonal solve: when the generator is exactly diagonal in the dyad basis (diagonal Hamiltonian blocks
+  and diagonal collapse operators: a closed model in its eigenbasis, pure dephasing), `diagonal_solve=True`
+  (default) solves every shifted system, and the Hilbert resolvent of a diagonal Hamiltonian, by an
+  element-wise division, which is the sum over states: exact to rounding, no iteration.
+  `diagonal_solve=False` keeps GMRES with its preconditioner. `backend.generator_is_diagonal` and
+  `diagnostics["solver"]["method"]` (`"diagonal"` or `"gmres"`) tell which route ran;
 - GMRES restart: `resolvent_restart=None` keeps SciPy's 20; no other value wins on the examples
   (see the CHANGELOG), and `m` costs `(m + 1) D^2` complex numbers;
 - no explicit Liouville matrix.

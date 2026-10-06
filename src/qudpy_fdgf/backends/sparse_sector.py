@@ -50,6 +50,15 @@ class SparseSectorBackend(BackendBase):
     The default ``"auto"`` selects ``"diagonal"`` when the Hamiltonian blocks are
     diagonal blocks of single sectors (the eigenbasis the model adapters provide) and
     ``None`` otherwise; ``self.preconditioner`` holds the choice made.
+
+    When the generator is *exactly* diagonal in the dyad basis (diagonal Hamiltonian blocks and
+    collapse operators that are diagonal blocks too, as for a closed model in its eigenbasis or
+    for pure dephasing), ``diagonal_solve=True`` (the default) solves every shifted system by an
+    element-wise division, ``x = b / [(eta - i omega) - A_diag]``: the sum over states, exact to
+    rounding, one pass over the vector. The Hilbert resolvent of a diagonal Hamiltonian is solved
+    the same way. ``diagonal_solve=False`` keeps GMRES with its preconditioner, which is how the
+    preconditioner itself is tested. ``generator_is_diagonal`` reports whether the generator is
+    diagonal and ``solve_statistics()["method"]`` which method ran.
     """
 
     preconditioners = (None, "diagonal", "auto")
@@ -88,6 +97,7 @@ class SparseSectorBackend(BackendBase):
         krylov_maxiter=None,
         resolvent_restart=None,
         preconditioner="auto",
+        diagonal_solve=True,
         cache_propagations=True,
         max_cache_entries=32,
         **options,
@@ -100,6 +110,10 @@ class SparseSectorBackend(BackendBase):
             )
         self.preconditioner_option = preconditioner
         self.preconditioner = None if preconditioner == "auto" else preconditioner
+        self.diagonal_solve = bool(diagonal_solve)
+        self.generator_is_diagonal = False
+        self._diagonal_solve_active = False
+        self._hilbert_diagonal_active = False
         self.krylov_tolerance = float(krylov_tolerance)
         self.krylov_maxiter = (
             None if krylov_maxiter is None else int(krylov_maxiter)
@@ -130,15 +144,37 @@ class SparseSectorBackend(BackendBase):
                     return False
         return True
 
+    def _generator_is_diagonal(self):
+        """Whether the generator is exactly diagonal in the dyad basis |x><y|.
+
+        True when the Hamiltonian blocks are diagonal blocks of single sectors and every collapse
+        operator is a diagonal block too: then ``L|x><y| = [-i(E_x - E_y) + sum_c gamma_c (L_xx L_yy^*
+        - (K_xx + K_yy)/2)] |x><y|``. A collapse operator that moves population (``|j><i|``) or couples
+        coherences, or a block that cannot be inspected (matrix-free), makes it False.
+        """
+        if not self._hamiltonian_is_diagonal():
+            return False
+        for channel in self._collapse_channels:
+            for source, blocks in channel.operator_blocks.items():
+                for target, operator in blocks.items():
+                    if target != source or not _is_diagonal(operator):
+                        return False
+        return True
+
     def build(self, model, context=None, initial_state=None):
         super().build(model, context=context, initial_state=initial_state)
         if self.preconditioner_option == "auto":
             self.preconditioner = "diagonal" if self._hamiltonian_is_diagonal() else None
         self._liouville = self.generator.linear_operator
+        self.generator_is_diagonal = self._generator_is_diagonal()
+        self._diagonal_solve_active = self.diagonal_solve and self.generator_is_diagonal
+        self._hilbert_diagonal_active = self.diagonal_solve and self._hamiltonian_is_diagonal()
+        self._solve_method = "diagonal" if self._diagonal_solve_active else "gmres"
         self._liouville_diagonal = None
         self._hamiltonian_diagonal = None
-        if self.preconditioner == "diagonal":
+        if self.preconditioner == "diagonal" or self._diagonal_solve_active:
             self._liouville_diagonal = self.generator.diagonal()
+        if self.preconditioner == "diagonal" or self._hilbert_diagonal_active:
             self._hamiltonian_diagonal, _ = self.generator.operator_diagonal(
                 self._hamiltonian
             )
@@ -336,8 +372,18 @@ class SparseSectorBackend(BackendBase):
         return solution, info, len(iterations)
 
     def _solve_liouville_resolvent(self, density_vector, omega, eta, *, adjoint=False):
-        """Vector and frequency -> GMRES solution of the shifted system (or of its adjoint)."""
+        """Vector and frequency -> solution of the shifted system (or of its adjoint).
+
+        An exactly diagonal generator is solved by division (``diagonal_solve``), otherwise by GMRES.
+        """
         shift = self.generator.frequency_shift(omega, eta)
+        if self._diagonal_solve_active:
+            solution = self._diagonal_resolvent(
+                np.asarray(density_vector, dtype=np.complex128).reshape(-1, 1), shift, adjoint
+            )[:, 0]
+            self._counters["resolvent_solves"] += 1
+            self._record_solve(iterations=0, omega=float(omega), eta=float(eta), adjoint=bool(adjoint))
+            return solution, 0.0
         dimension = self.layout.total_dimension**2
         forward = LinearOperator(
             (dimension, dimension),
@@ -382,6 +428,17 @@ class SparseSectorBackend(BackendBase):
         solution = (np.conj(prefactor) if adjoint else prefactor) * raw_solution
         return np.asarray(solution, dtype=np.complex128), residual
 
+    def _diagonal_resolvent(self, states, shift, adjoint):
+        """Columns and shift -> ``[shift - A]^-1`` (or its adjoint) applied by division, for a diagonal ``A``."""
+        denominator = shift - self._liouville_diagonal
+        if adjoint:
+            denominator = np.conj(denominator)
+        if not np.all(np.abs(denominator) > 0):
+            raise ConvergenceError(
+                "The shifted generator is singular at this frequency (eta = 0 on a pole of the generator)."
+            )
+        return self.generator.frequency_prefactor * states / denominator[:, None]
+
     def _propagate_liouville_block(self, states, delay, adjoint):
         """Vectors and delay -> ``exp(L t)`` (or its adjoint) applied to each column at once."""
         delay = float(delay)
@@ -403,6 +460,14 @@ class SparseSectorBackend(BackendBase):
         for index, value in enumerate(values):
             if domain == "time":
                 out[:, :, index] = self._propagate_liouville_block(states, value, adjoint)
+            elif self._diagonal_solve_active:
+                out[:, :, index] = self._diagonal_resolvent(
+                    states, self.generator.frequency_shift(value, eta), adjoint
+                )
+                self._counters["resolvent_solves"] += states.shape[1]
+                if self.options.get("record_solves", False):
+                    for _ in range(states.shape[1]):
+                        self._record_solve(iterations=0, omega=float(value), eta=float(eta), adjoint=bool(adjoint))
             else:
                 for column in range(states.shape[1]):
                     out[:, column, index], _ = self._solve_liouville_resolvent(
@@ -753,6 +818,20 @@ class SparseSectorBackend(BackendBase):
         eta = self.eta if eta is None else float(eta)
         shift = complex(float(omega), eta)
         dimension = self.layout.total_dimension
+
+        if self._hilbert_diagonal_active:
+            denominator = shift - self._hamiltonian_diagonal
+            if not np.all(np.abs(denominator) > 0):
+                raise ConvergenceError("The shifted Hamiltonian is singular at this frequency (eta = 0 on a pole).")
+            return vector / denominator, {
+                "method": "diagonal",
+                "gmres_info": 0,
+                "iterations": 0,
+                "residual_norm": 0.0,
+                "relative_residual": 0.0,
+                "omega": float(omega),
+                "eta": eta,
+            }
 
         operator = LinearOperator(
             (dimension, dimension),

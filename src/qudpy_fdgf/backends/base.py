@@ -245,6 +245,8 @@ class BackendBase(ABC):
                 statistics["relative_residual_sum"] / samples if samples else None
             ),
         }
+        if self._solve_method == "diagonal":
+            result["exact"] = True      # solved by division: exact to rounding, no iteration, no residual measured
         if self._solve_method == "gmres":
             result["iterations_mean"] = statistics["iterations"] / solves if solves else None
             result["iterations_max"] = statistics["iterations_max"]
