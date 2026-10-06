@@ -130,8 +130,8 @@ class SparseSectorBackend(BackendBase):
                     return False
         return True
 
-    def build(self, model, context=None):
-        super().build(model, context=context)
+    def build(self, model, context=None, initial_state=None):
+        super().build(model, context=context, initial_state=initial_state)
         if self.preconditioner_option == "auto":
             self.preconditioner = "diagonal" if self._hamiltonian_is_diagonal() else None
         self._liouville = self.generator.linear_operator
@@ -242,6 +242,81 @@ class SparseSectorBackend(BackendBase):
         while len(self._liouville_time_cache) > self.max_cache_entries:
             self._liouville_time_cache.popitem(last=False)
         return propagated
+
+    def _reference_state_changed(self):
+        self._initial_density_vector = self._initial_density_matrix.reshape(-1, order="F")
+
+    def _solve_stationary(
+        self, reference, weights, *, restart=100, check_unique=False, check_cycles=20
+    ):
+        """GMRES on ``L + |r>><<weights|`` with ``r = reference``; a second solve with another ``r`` tests the kernel.
+
+        If the kernel of ``L`` is one-dimensional the solution is its trace-one element whatever
+        the trace-one vector ``r``. If the kernel is larger the system is singular and consistent, and
+        GMRES, which works in the Krylov space of ``r``, returns the projection of ``r`` on the kernel
+        (normalized), which changes with ``r``: that is what the comparison detects. The first ``r``
+        is the maximally mixed state, which is itself stationary for a unital generator (a closed
+        model), so that the answer is then the maximally mixed state rather than an arbitrary element.
+
+        A random ``r`` excites every slow mode, so the second solve is as stiff as the relaxation gap
+        of the generator: it is limited to ``check_cycles`` restart cycles of ``restart`` iterations
+        (2000 iterations by default). If it has not converged by then the uniqueness is reported as
+        unverified (``unique`` is ``None``); the first solve is unaffected. The test is off by default:
+        it costs seconds to tens of seconds from D = 57 and is conclusive only for small or well
+        conditioned generators (D = 16 needs 1900 iterations, D = 31 needs 5700 for a decay rate 1/1000
+        of the energy scale), where the dense backend tests uniqueness for free.
+        """
+        size = reference.size
+        dimension = self.layout.total_dimension
+
+        def solve(right_hand_side, maxiter):
+            operator = LinearOperator(
+                (size, size),
+                dtype=np.complex128,
+                matvec=lambda value: self.generator.matvec(value)
+                + right_hand_side * np.vdot(weights, value),
+            )
+            iterations = []
+            solution, status = gmres(
+                operator,
+                right_hand_side,
+                rtol=self.krylov_tolerance,
+                atol=0.0,
+                restart=min(int(restart), size),
+                maxiter=maxiter,
+                callback=iterations.append,
+                callback_type="pr_norm",
+            )
+            if status != 0:
+                residual = float(np.linalg.norm(operator @ solution - right_hand_side))
+                return None, len(iterations), residual
+            return solution, len(iterations), None
+
+        def trace(vector):
+            return np.sum(vector[:: dimension + 1])
+
+        # a stiff or degenerate generator makes GMRES crawl: 100 restart cycles unless krylov_maxiter says otherwise
+        first, iterations, residual = solve(reference, 100 if self.krylov_maxiter is None else self.krylov_maxiter)
+        if first is None:
+            raise ConvergenceError(
+                "GMRES did not converge for the stationary state "
+                f"(residual={residual:.3e} after {iterations} iterations): the relaxation gap of the "
+                "generator is probably too small for this solver (or the kernel is degenerate). Raise "
+                "krylov_maxiter, use the dense backend for a small model, or supply the state with "
+                "initial_state."
+            )
+        info = {"method": "gmres", "unique": None, "iterations": iterations, "second_solve_difference": None}
+        if check_unique:
+            generator = np.random.default_rng(97)
+            other = generator.standard_normal(size) + 1j * generator.standard_normal(size)
+            second, second_iterations, _ = solve(other / trace(other), check_cycles)
+            info["second_solve_iterations"] = second_iterations
+            if second is not None:
+                second = second / trace(second)
+                difference = float(np.linalg.norm(first - second) / np.linalg.norm(first))
+                info["second_solve_difference"] = difference
+                info["unique"] = bool(difference < max(1e-6, 1e3 * self.krylov_tolerance))
+        return first, info
 
     def _gmres(self, operator, right_hand_side, preconditioner, *, initial_guess=None):
         """GMRES run -> (solution, SciPy info, number of iterations)."""

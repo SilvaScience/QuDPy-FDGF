@@ -418,7 +418,7 @@ When \texttt{backend="auto"} is selected, the solver compares the effective mode
 \subsubsection{Model registration and backend construction}
 
 
-The method \texttt{feed\_model(model, context=None)} connects a \texttt{SectorModel} to the solver. The method performs the following operations:
+The method \texttt{feed\_model(model, context=None, initial\_state=None)} connects a \texttt{SectorModel} to the solver. The method performs the following operations:
 \begin{enumerate}
     \item validates the structural model contract;
     \item resolves the thermodynamic context, initial state, and collapse channels;
@@ -443,7 +443,29 @@ The perturbative response of the manuscript starts from a reference state $\hat\
 \begin{equation}
     r=\frac{\lVert\mathcal{L}\kket{\hat\rho_{\mathrm{ref}}}\rVert}{\lVert\kket{\hat\rho_{\mathrm{ref}}}\rVert},
 \end{equation}
-with Frobenius norms and in the units of the Hamiltonian and of the rates. The constructor argument \texttt{check\_stationarity} selects the behavior when $r$ exceeds \texttt{stationarity\_tolerance} (default $10^{-8}$): \texttt{"warn"} (default) emits a \texttt{StationarityWarning}, \texttt{"error"} raises \texttt{StationarityError}, and \texttt{"off"} skips the check. The method \texttt{stationarity\_residual()} returns $r$ at any time, and \texttt{summary()} reports it. For example, an open two-level system at $10~\mathrm{K}$ with the channel $\hat L=\ket{g}\bra{e}$ has a Gibbs state with $9\%$ of excited population that the channel empties: $r=0.03$, and the linear response at resonance is $9\%$ below that of the stationary state, which is the ground state. The check does not construct a stationary state; a state that fails it must be replaced by the user.
+with Frobenius norms and in the units of the Hamiltonian and of the rates. The constructor argument \texttt{check\_stationarity} selects the behavior when $r$ exceeds \texttt{stationarity\_tolerance} (default $10^{-8}$): \texttt{"warn"} (default) emits a \texttt{StationarityWarning}, \texttt{"error"} raises \texttt{StationarityError}, and \texttt{"off"} skips the check. The method \texttt{stationarity\_residual()} returns $r$ at any time, and \texttt{summary()} reports it. For example, an open two-level system at $10~\mathrm{K}$ with the channel $\hat L=\ket{g}\bra{e}$ has a Gibbs state with $9\%$ of excited population that the channel empties: $r=0.03$, and the linear response at resonance is $9\%$ below that of the stationary state, which is the ground state. The check does not construct a stationary state; a state that fails it is replaced by the stationary state of the generator (Sec.~\ref{sec:steady-state}), computed by \texttt{steady\_state()} and imposed with \texttt{feed\_model(model, initial\_state="steady")}.
+
+\subsubsection{Stationary state of the generator}
+\label{sec:steady-state}
+
+The reference state can be replaced by the stationary state of the generator, $\mathcal{L}\hat\rho_{\mathrm{ss}}=0$ with $\mathrm{Tr}\,\hat\rho_{\mathrm{ss}}=1$, which the solver computes from the model itself:
+\begin{verbatim}
+state = solver.steady_state(check_unique=None)       # DensityState
+solver.feed_model(model, initial_state=state)        # or initial_state="steady"
+\end{verbatim}
+\texttt{steady\_state} solves the linear system
+\begin{equation}
+    \big(\mathcal{L}+\kket{\hat r}\langle\!\langle\mathbb{1}|\big)\kket{\hat\rho}=\kket{\hat r},
+    \qquad \mathrm{Tr}\,\hat r=1 ,
+\end{equation}
+with $\hat r=\mathbb{1}/D_{\mathrm H}$ and $\langle\!\langle\mathbb{1}|$ the trace functional. Applying $\langle\!\langle\mathbb{1}|$ to it gives $\mathrm{Tr}\,\hat\rho=1$ because $\langle\!\langle\mathbb{1}|\mathcal{L}=0$ (trace preservation), hence $\mathcal{L}\hat\rho=0$. The matrix is invertible exactly when the kernel of $\mathcal{L}$ is one-dimensional, and its solution is then the stationary state, whatever $\hat r$. The dense backend factorizes the matrix (LU); the sparse backend applies it matrix-free and solves it with GMRES (restart 100, tolerance \texttt{krylov\_tolerance}), without preconditioner, within 100 restart cycles unless \texttt{krylov\_maxiter} is set; a stiff generator, whose relaxation gap is small next to $\|\mathcal{L}\|$, can exhaust them, in which case \texttt{ConvergenceError} names the remedies.
+
+The state depends only on the generator, not on the reference state of the model or on the thermodynamic context. It is returned as a \texttt{DensityState} that contains the sector blocks above $10^{-14}$, with the diagnostics in \texttt{state.metadata["steady\_state"]}: \texttt{method}, \texttt{relative\_residual} ($\lVert\mathcal{L}\hat\rho\rVert/\lVert\hat\rho\rVert$), \texttt{hermiticity\_error} (before symmetrization), \texttt{minimum\_eigenvalue}, and the evidence on uniqueness. The state of a unique kernel is a density matrix; a \texttt{SteadyStateWarning} is emitted when it is not (smallest eigenvalue below $-10^{-8}$, Hermiticity error above $10^{-8}$, or a large residual).
+
+\paragraph{Uniqueness.} If the kernel of $\mathcal{L}$ has dimension above one (a closed model, conserved quantities, a level or sector without relaxation, dark states of a collective decay), there is no stationary state but a family, and what the solver returns is one element of it, without physical meaning; a \texttt{SteadyStateWarning} says so. The dense backend detects it for free: the reciprocal condition number $\rho$ of the LU gives the error estimate $\epsilon/\rho$, and the kernel is declared degenerate (\texttt{unique=False}, minimum-norm solution) above $10^{-6}$. The sparse backend does not test it by default (\texttt{unique=None}), because the test is as stiff as the generator: with \texttt{check\_unique=True} it solves a second system with a random $\hat r$, which for a degenerate kernel gives another element (GMRES returns the projection of $\hat r$ on the kernel); the solve is limited to 2000 iterations and leaves \texttt{unique=None} if it has not converged, as it does for a stiff unique generator from $D_{\mathrm H}\gtrsim30$ with a rate 1/1000 of the energy scale. For a small model, the dense backend is the tool to ask whether the stationary state is unique. For a closed model the maximally mixed state is returned with a warning (it is stationary, as is any state diagonal in the eigenbasis).
+
+\paragraph{Imposing a reference state.} \texttt{feed\_model(model, context=None, initial\_state=None)} accepts a \texttt{DensityState} or a \texttt{PureState} for \texttt{initial\_state}, or the string \texttt{"steady"}, which computes the stationary state of the generator and takes it. The state replaces the one the model would supply (its \texttt{equilibrium\_state(context)} or \texttt{initial\_condition}, which are then not called, so that a thermal context without \texttt{energy\_unit} is not an error); \texttt{context} is still given to the model for its collapse channels. A \texttt{DensityState} is validated like any reference state (Hermitian, unit trace, positive); another type raises \texttt{TypeError}. The stationarity check then runs as usual and passes, $r$ being of the order of the residual of the solve. For the two-level system of the example above, imposing the stationary state removes the 9\% of excited population: the linear response at resonance equals that of the ground state, and for channels that satisfy detailed balance (rates $\gamma_\downarrow$ and $\gamma_\uparrow=\gamma_\downarrow e^{-\hbar\omega/k_BT}$) the stationary state is the Gibbs state, which \texttt{steady\_state} reproduces to $10^{-10}$. With rates $\gamma_\downarrow$ and $\gamma_\uparrow$ that do not, the excited population is $\gamma_\uparrow/(\gamma_\uparrow+\gamma_\downarrow)$ and the linear response scales with the ground population $\gamma_\downarrow/(\gamma_\uparrow+\gamma_\downarrow)$.
+
 
 
 

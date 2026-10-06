@@ -43,6 +43,15 @@ class NullPathwayWarning(UserWarning):
     """
 
 
+class SteadyStateWarning(UserWarning):
+    """Emitted when the stationary state of the generator is not well determined.
+
+    The kernel of ``L`` is not one-dimensional (a closed model, several conserved quantities,
+    decoupled sectors without relaxation), or the relaxation gap is too small for the solve to
+    resolve it, or the state returned is not a density matrix to the tolerance.
+    """
+
+
 class StationarityError(ModelContractError):
     """Raised when the reference state is not stationary and ``check_stationarity="error"``."""
 

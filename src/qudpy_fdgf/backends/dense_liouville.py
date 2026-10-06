@@ -7,9 +7,11 @@ dimension remains affordable.
 """
 
 from collections import OrderedDict
+import warnings
 
 import numpy as np
-from scipy.linalg import expm
+from scipy.linalg import LinAlgWarning, expm, lstsq, lu_factor, lu_solve
+from scipy.linalg.lapack import zgecon
 
 from .base import BackendBase
 from ..capabilities import BackendCapabilities, Capabilities
@@ -66,8 +68,8 @@ class DenseLiouvilleBackend(BackendBase):
         self._transition_matrix_cache = {}
         self._observable_matrix_cache = {}
 
-    def build(self, model, context=None):
-        super().build(model, context=context)
+    def build(self, model, context=None, initial_state=None):
+        super().build(model, context=context, initial_state=initial_state)
         dimension = self.layout.total_dimension
         self._H_dense = self.materialize(self._hamiltonian)
         self._A_dense = self.materialize(self.generator.linear_operator)
@@ -163,6 +165,37 @@ class DenseLiouvilleBackend(BackendBase):
             else:
                 out[:, :, index] = self._resolvent_block(states, value, eta, adjoint)
         return out
+
+    def _reference_state_changed(self):
+        self._rho_initial = self._initial_density_matrix.reshape(-1, order="F")
+
+    def _solve_stationary(self, reference, weights, **_):
+        """Dense LU of ``L + |reference>><<weights|``; its reciprocal condition number detects a degenerate kernel.
+
+        The matrix is singular when the kernel of ``L`` has dimension above one; the error estimate
+        ``eps / rcond`` then exceeds 1e-6 and the minimum-norm solution of the (consistent) system
+        is returned instead, with ``unique`` false.
+        """
+        matrix = self._A_dense.copy()
+        matrix += np.outer(reference, np.conj(weights))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", LinAlgWarning)       # an exactly singular matrix is handled below
+            factors = lu_factor(matrix, check_finite=False)
+        norm = float(np.linalg.norm(matrix, 1))
+        reciprocal = float(zgecon(factors[0], norm, norm="1")[0])
+        epsilon = float(np.finfo(float).eps)
+        error_estimate = epsilon / max(reciprocal, np.finfo(float).tiny)
+        unique = error_estimate < 1e-6
+        if unique:
+            solution = lu_solve(factors, reference, check_finite=False)
+        else:
+            solution = lstsq(matrix, reference, lapack_driver="gelsy", check_finite=False)[0]
+        return solution, {
+            "method": "lu" if unique else "lstsq",
+            "unique": bool(unique),
+            "reciprocal_condition": reciprocal,
+            "error_estimate": error_estimate,
+        }
 
     def solve_hilbert_resolvent(self, vector, omega, *, eta=None, **_):
         """Vector and frequency -> exact dense Hilbert resolvent."""

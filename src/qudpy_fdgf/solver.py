@@ -19,6 +19,7 @@ from .backends import (
     SparseSectorBackend,
 )
 from .capabilities import Capabilities, ModelRequirements
+from .contracts import DensityState, PureState
 from .diagnostics import decay_rates
 from .backends.base import require_eta
 from .factorized import evaluate_factorized, pathway_operations, plan_factorization
@@ -27,6 +28,7 @@ from .exceptions import (
     NullPathwayWarning,
     StationarityError,
     StationarityWarning,
+    SteadyStateWarning,
 )
 from .observables import ObservableSpec, normalize_observables
 from .pathways import FrequencyPathway
@@ -158,16 +160,38 @@ class SpectroscopySolver:
             )
         return supported[0]
 
-    def feed_model(self, model, *, context=None):
-        """Sector-based model -> initialized backend and solver."""
+    def feed_model(self, model, *, context=None, initial_state=None):
+        """Sector-based model -> initialized backend and solver.
+
+        ``initial_state`` imposes the reference state of the perturbation expansion instead of the one
+        the model supplies (its ``equilibrium_state(context)`` or ``initial_condition``): a
+        ``DensityState`` or a ``PureState`` (for example the result of ``steady_state()``), or the
+        string ``"steady"``, which takes the stationary state of the generator of the model. The
+        model is not asked for its own state then, and ``context`` keeps its other uses (the model
+        still receives it for its collapse channels).
+        """
         if context is not None:
             self.thermodynamic_context = context
+        if initial_state is not None and not (
+            isinstance(initial_state, (DensityState, PureState))
+            or (isinstance(initial_state, str) and initial_state == "steady")
+        ):
+            raise TypeError(
+                "initial_state must be a DensityState, a PureState or 'steady'; "
+                f"got {initial_state!r}."
+            )
         backend_class = self._resolve_backend_class(model)
         backend = backend_class(
             eta=self.eta,
             **self.backend_options,
         )
-        backend.build(model, context=self.thermodynamic_context)
+        if initial_state is None:
+            backend.build(model, context=self.thermodynamic_context)
+        else:
+            backend.build(model, context=self.thermodynamic_context, initial_state=initial_state)
+            if isinstance(initial_state, str):
+                self._steady_state_info = backend.impose_steady_state()
+                self._warn_about_steady_state(self._steady_state_info, backend)
         actual_requirements = ModelRequirements(
             state_kind=(
                 "pure" if backend._initial_is_pure else "mixed"
@@ -197,6 +221,60 @@ class SpectroscopySolver:
         self.backend = backend
         self._check_reference_state()
         return self
+
+    def steady_state(self, *, check_unique=None):
+        """Loaded model -> ``DensityState`` of the stationary state, ``L rho = 0`` with ``Tr rho = 1``.
+
+        Solves ``(L + |r>><<1|) x = r`` for a trace-one ``r`` (a dense LU on the dense backend, GMRES
+        on the sparse one), which gives the stationary state when the kernel of ``L`` is
+        one-dimensional. The state does not depend on the reference state of the model, nor on the
+        thermodynamic context, only on the generator: pass it to ``feed_model(model,
+        initial_state=state)`` to start the expansion from it. ``state.metadata["steady_state"]``
+        holds the method, the relative residual, the Hermiticity error, the smallest eigenvalue and
+        the evidence about uniqueness (``unique`` is ``None`` when the sparse backend could not
+        verify it, see below). A ``SteadyStateWarning`` is emitted when the kernel is not
+        one-dimensional (a closed model, conserved quantities, a sector without relaxation: the state
+        is then not unique and what is returned means nothing) or when the result is not a density
+        matrix to the tolerance.
+
+        Uniqueness is tested for free by the dense backend (reciprocal condition number of the LU).
+        The sparse backend does not test it by default (``unique`` is ``None``): the test, selected
+        with ``check_unique=True``, solves a second system with a random right-hand side, which excites
+        every slow mode and is as stiff as the relaxation gap; it stops after 2000 iterations and
+        leaves ``unique`` at ``None`` if it has not converged. On a closed model or one with
+        conserved quantities the sparse solve may converge to one element of the family, fail to
+        converge (``ConvergenceError``, after 100 restart cycles unless ``krylov_maxiter`` is set), or,
+        for a small model, be flagged by ``check_unique=True``; use the dense backend to check a
+        small model.
+        """
+        self._require_ready()
+        options = {} if check_unique is None else {"check_unique": check_unique}
+        rho, info = self.backend.steady_state(**options)
+        self._warn_about_steady_state(info, self.backend)
+        return self.backend.density_state(rho, metadata={"steady_state": info})
+
+    def _warn_about_steady_state(self, info, backend):
+        problems = []
+        if info["unique"] is False:
+            problems.append(
+                "the kernel of the generator is not one-dimensional (a closed model, conserved "
+                "quantities, or a sector without relaxation), so its stationary state is not unique "
+                "and the state returned is one element of the family, which has no physical meaning; "
+                "supply the reference state with initial_state"
+            )
+        elif info["relative_residual"] > max(1e-8, 100 * getattr(backend, "krylov_tolerance", 0.0)):
+            problems.append(f"the residual ||L rho|| / ||rho|| = {info['relative_residual']:.2e} is large")
+        if info["minimum_eigenvalue"] < -1e-8 or info["hermiticity_error"] > 1e-8:
+            problems.append(
+                f"the result is not a density matrix (smallest eigenvalue {info['minimum_eigenvalue']:.2e}, "
+                f"Hermiticity error {info['hermiticity_error']:.2e})"
+            )
+        if problems:
+            warnings.warn(
+                "Stationary state of the generator: " + "; ".join(problems) + ".",
+                SteadyStateWarning,
+                stacklevel=3,
+            )
 
     def stationarity_residual(self):
         """Loaded model -> ``||L rho_ref|| / ||rho_ref||`` of its reference state.

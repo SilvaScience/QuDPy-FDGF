@@ -291,8 +291,76 @@ class BackendBase(ABC):
         result["maximum_resolvent_residual"] = self._max_residual
         return result
 
-    def build(self, model, context=None):
-        """Model and context -> initialized sector operators and state."""
+    # ----------------------------------------------------------------- stationary state of L
+    def _solve_stationary(self, reference, weights, **options):
+        """Solve ``(L + |reference>><<weights|) x = reference``; returns ``(x, info)``.
+
+        With ``weights = vec(1)`` and ``Tr reference = 1`` the solution is the stationary state of
+        ``L`` of unit trace whenever the kernel of ``L`` is one-dimensional: applying ``<<1|`` to the
+        equation gives ``Tr x = 1`` because ``<<1|L = 0``, hence ``L x = 0``.
+        """
+        raise NotImplementedError(
+            f"Backend {self.name!r} does not compute the stationary state."
+        )
+
+    def steady_state(self, **options):
+        """Generator -> ``(rho, info)``: the stationary density matrix ``L rho = 0``, ``Tr rho = 1``.
+
+        ``rho`` is in the layout order of the sectors. ``info`` holds the method, the relative
+        residual ``||L rho|| / ||rho||``, the Hermiticity error before symmetrization, the smallest
+        eigenvalue, whether the kernel of ``L`` was found to be one-dimensional (``"unique"``) and
+        the method-specific evidence for it.
+        """
+        size = self.layout.total_dimension
+        identity = np.eye(size, dtype=np.complex128).reshape(-1, order="F")
+        vector, info = self._solve_stationary(identity / size, identity, **options)
+        rho = vector.reshape((size, size), order="F")
+        rho = rho / np.trace(rho)
+        hermiticity = float(np.linalg.norm(rho - rho.conj().T) / np.linalg.norm(rho))
+        rho = 0.5 * (rho + rho.conj().T)
+        flat = rho.reshape(-1, order="F")
+        info.update(
+            {
+                "relative_residual": float(
+                    np.linalg.norm(self.generator.matvec(flat)) / np.linalg.norm(flat)
+                ),
+                "hermiticity_error": hermiticity,
+                "minimum_eigenvalue": float(np.linalg.eigvalsh(rho)[0]),
+            }
+        )
+        return rho, info
+
+    def density_state(self, rho, *, metadata=None):
+        """Density matrix in the layout order -> ``DensityState`` of its non-negligible sector blocks."""
+        blocks = {}
+        for ket in self.layout.sectors:
+            for bra in self.layout.sectors:
+                block = rho[self.layout.slices[ket], self.layout.slices[bra]]
+                if np.abs(block).max() > 1e-14:
+                    blocks[(ket, bra)] = DenseDensityBlock(block.copy())
+        return DensityState(blocks=blocks, metadata=dict(metadata or {}))
+
+    def set_reference_state(self, condition):
+        """Replace the reference state by a ``DensityState`` or ``PureState`` of the loaded model."""
+        self._imposed_state = condition
+        self._load_initial_condition()
+        self._reference_state_changed()
+
+    def _reference_state_changed(self):
+        """Hook: backends refresh what they derived from the reference state."""
+
+    def impose_steady_state(self):
+        """The stationary state of the generator becomes the reference state; returns its ``info``."""
+        rho, info = self.steady_state()
+        self.set_reference_state(self.density_state(rho, metadata={"steady_state": info}))
+        return info
+
+    def build(self, model, context=None, initial_state=None):
+        """Model and context -> initialized sector operators and state.
+
+        ``initial_state`` (a ``DensityState`` or a ``PureState``) replaces the reference state that
+        the model would supply; the model is then not asked for it.
+        """
         required = (
             "sectors",
             "dimension",
@@ -310,6 +378,7 @@ class BackendBase(ABC):
             )
 
         self.model = model
+        self._imposed_state = initial_state
         self.context = ThermodynamicContext.from_value(context)
         capabilities = getattr(model, "capabilities", None)
         capabilities = capabilities() if callable(capabilities) else capabilities
@@ -420,6 +489,20 @@ class BackendBase(ABC):
         return method(self.context)
 
     def _resolve_initial_condition(self):
+        imposed = getattr(self, "_imposed_state", None)
+        if isinstance(imposed, str):
+            # "steady": a placeholder, replaced by the stationary state as soon as the build is over
+            dimension = self.layout.total_dimension
+            return DensityState(
+                blocks={
+                    (sector, sector): DenseDensityBlock(
+                        np.eye(self.layout.dimensions[sector], dtype=np.complex128) / dimension
+                    )
+                    for sector in self.layout.sectors
+                }
+            )
+        if imposed is not None:
+            return imposed
         if self.context is not None:
             equilibrium = getattr(self.model, "equilibrium_state", None)
             if callable(equilibrium):

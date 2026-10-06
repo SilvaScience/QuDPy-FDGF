@@ -34,6 +34,7 @@ from .exceptions import (
     SolverV10Error,
     StationarityError,
     StationarityWarning,
+    SteadyStateWarning,
 )
 from .pathways import (
     FrequencyPathway,
@@ -93,6 +94,7 @@ __all__ = [
     "SpectrumResult",
     "StationarityError",
     "StationarityWarning",
+    "SteadyStateWarning",
     "ThermodynamicContext",
     "coherence_orders_from_interactions",
     "decay_rates",

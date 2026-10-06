@@ -73,6 +73,22 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 - `generators.operator_matmat` and `operator_rmatmat` apply an operator to a matrix.
 
 ### Added
+- `solver.steady_state(check_unique=None)`: the stationary state of the generator as a `DensityState`
+  (`L rho = 0`, `Tr rho = 1`), from `(L + |r>><<1|) x = r` with `Tr r = 1`: dense LU or matrix-free GMRES
+  (restart 100, 100 restart cycles unless `krylov_maxiter`, `ConvergenceError` beyond). Diagnostics in
+  `state.metadata["steady_state"]` (method, relative residual, Hermiticity error, smallest eigenvalue,
+  evidence about uniqueness). `SteadyStateWarning` when the kernel of `L` is not one-dimensional or the
+  result is not a density matrix. The dense backend tests uniqueness for free (reciprocal condition number
+  of the LU, estimate eps/rcond < 1e-6; the minimum-norm solution is returned otherwise); the sparse backend
+  does so only with `check_unique=True` (a second GMRES solve with a random `r`, limited to 2000 iterations,
+  `unique=None` if inconclusive: the test is as stiff as the generator).
+- `feed_model(model, context=None, initial_state=None)`: `initial_state` imposes the reference state, a
+  `DensityState` or `PureState` (validated like any reference state) or `"steady"` for the stationary state of
+  the generator; the model is then not asked for its own state. Backend methods `set_reference_state`,
+  `impose_steady_state`, `density_state`. `tests/api/test_steady_state.py` (24 tests: ground state,
+  Gibbs state under detailed balance, populations balancing the rates, closed model, decoupled level,
+  independence from the reference state, sectors, imposing the state cures the stationarity warning, linear
+  response scales with the stationary ground population, the model is not asked for a state that is imposed).
 - Diagnostics of the linear solves: `result.diagnostics["solver"]` with `solves`, `iterations_mean`,
   `iterations_max`, `relative_residual_max`, `relative_residual_mean` (true residual `||b - S x|| /
   ||b||`, a backward error), `condition_estimate` (`max (eta + |omega| + ||L||) / eta` over the

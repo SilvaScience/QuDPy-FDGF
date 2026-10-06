@@ -102,7 +102,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `183 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `207 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -249,7 +249,27 @@ solver.feed_model(model, context=context)   # StationarityWarning if r > toleran
 solver.stationarity_residual()              # r, at any time; also in solver.summary()
 ```
 
-The check does not construct a stationary state: a state that fails it must be replaced.
+The check does not construct a stationary state, but the solver can compute it:
+
+```python
+state = solver.steady_state()                         # DensityState: L rho = 0, Tr rho = 1
+solver.feed_model(model, initial_state=state)         # impose it as the reference state ...
+solver.feed_model(model, initial_state="steady")      # ... or in one call
+```
+
+`steady_state()` solves `(L + |r>><<1|) x = r` with a trace-one `r` (dense LU on the dense backend,
+GMRES on the sparse one). It is the stationary state when the kernel of `L` is one-dimensional, whatever
+the reference state of the model or the thermodynamic context. If the kernel is larger (a closed model,
+conserved quantities, a level without relaxation, dark states) the state is not unique and a
+`SteadyStateWarning` says so: the dense backend detects it for free (reciprocal condition number of the
+LU); the sparse backend tests it only with `check_unique=True`, a second solve that is as stiff as the
+generator (limited to 2000 iterations, `unique=None` if inconclusive). A stiff generator can exhaust the
+100 restart cycles of the first solve (`ConvergenceError`: raise `krylov_maxiter` or use the dense backend
+for a small model). The diagnostics are in `state.metadata["steady_state"]`. `initial_state` also
+accepts any `DensityState` or `PureState`; the model is then not asked for its own state. Example: for a
+two-level system with a decay channel that breaks detailed balance, the Gibbs state at 10 K triggers a
+`StationarityWarning` and a linear response 9 % below that of the stationary state; with
+`initial_state="steady"` the check passes.
 
 ## Dynamics convention
 
