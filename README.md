@@ -90,11 +90,11 @@ cell of Section 7 prints
 
 ```text
 peak = (-2.000, 2.000) eV
-max|S_pop + i S_pol| / max|S_pol| = 0.0e+00
+max|S_pop + i S_pol| / max|S_pol| = 1.3e-16
 N_fl / S_pop = 0.993262; 1 - exp(-5) = 0.993262
 ```
 
-and saves its results in `validation/results/data/example1.npz`.
+The second line is a rounding error, of the order of 1e-16 and platform dependent. The cell saves its results in `validation/results/data/example1.npz`.
 
 **3. Test suite** (about 15 s).
 

@@ -121,8 +121,8 @@ Each numerical line is followed by its analytical value. The absorptive line has
 \subsection{Next steps and tests}
 \begin{itemize}
 \item \texttt{examples/quickstart.py}: the listing above.
-\item \texttt{examples/example1\_two\_level\_open.ipynb}: Example~1 of the manuscript, with populations, action detection, and integrated jump observables (Sec.~\ref{sec:observables}); the listing of the manuscript is extracted from its cells tagged \texttt{listing}.
-\item \texttt{examples/example2\_xxz\_chain\_thermal.ipynb} and \texttt{examples/example3\_chi5\_2q.ipynb}: Examples~2 and~3.
+\item \texttt{examples/example1\_two\_level\_open.ipynb}: the tutorial of the manuscript (Sec.~4), with populations, action detection, and integrated jump observables (Sec.~\ref{sec:observables}); the listing of the manuscript is extracted from its cells tagged \texttt{listing}.
+\item \texttt{examples/example2\_xxz\_chain\_thermal.ipynb} and \texttt{examples/example3\_chi5\_2q.ipynb}: Examples~1 and~2 of the manuscript.
 \item \texttt{python -m pytest}: runs the test suite in \texttt{tests/}, including the analytical checks of the manuscript (about 17~s with a single BLAS thread, \texttt{OMP\_NUM\_THREADS=1}); \texttt{tests/api/} checks the contracts and options of the library, \texttt{tests/physics/} the closed-form results and limiting cases, and \texttt{tests/regression/} compares eight small calculations with stored outputs, which any change of the numerical core must reproduce.
 \item \texttt{validation/}: analysis notebooks (convergence, analytical limits, backend agreement), benchmark notebooks and scripts (time, memory, comparison with the original QuDPy), the scripts that redraw the figures of the manuscript, the shared models, and the stored results (see \texttt{validation/README.md}).
 \end{itemize}
@@ -1013,7 +1013,7 @@ tolerance.
 
 The default \texttt{preconditioner="auto"} applies the diagonal preconditioner when every Hamiltonian block is a diagonal block of a single sector (a model in its eigenbasis, which is what the adapters provide, without coupling between sectors), whatever the collapse operators, and none otherwise. Blocks that are arrays or sparse matrices are inspected (off-diagonal entries below $10^{-12}$ of the largest entry count as zero); matrix-free blocks cannot be, and the preconditioner is then left off, as it is for a model given in a basis that does not diagonalize its Hamiltonian. The choice made is stored in \texttt{backend.preconditioner} and reported as \texttt{diagnostics["solver"]["preconditioner"]}. \texttt{None} always gives plain GMRES and \texttt{"diagonal"} forces the preconditioner, which is valid for any model.
 
-The preconditioner is exact when the generator is diagonal, a closed model or diagonal collapse operators; otherwise the collapse operators perturb the diagonal, which keeps the energy differences, and it remains an approximation that is nevertheless far better than none. This was checked against plain GMRES (\texttt{krylov\_tolerance=1e-10}, restart 20, three kinds of start vector including a random one) on the three-site chain with dissipation scaled from $0.1$ to $1000$ and on the six-site XXZ chain of Example~2 ($D_{\mathrm H}=57$, 4~K) with collective decay or local dephasing from $10^{-3}$ to $10$~meV, at two broadenings each (\texttt{bench\_preconditioner\_dissipative.py}). The ratio of the mean number of iterations (preconditioned over plain) lies between $3\times10^{-4}$ and $0.76$ in 28 of the 30 cases, with a plain GMRES that reaches 54\,000 iterations in one solve against 1\,114 preconditioned; the true residuals are comparable and below $10^{-10}$. Only a local dephasing rate of 10~meV, an order of magnitude above the energy scale of the chain and far from any use in Example~2, is slightly unfavorable: $1.20$ and $1.23$ (about 40 iterations against 33).
+The preconditioner is exact when the generator is diagonal, a closed model or diagonal collapse operators; otherwise the collapse operators perturb the diagonal, which keeps the energy differences, and it remains an approximation that is nevertheless far better than none. This was checked against plain GMRES (\texttt{krylov\_tolerance=1e-10}, restart 20, three kinds of start vector including a random one) on the three-site chain with dissipation scaled from $0.1$ to $1000$ and on the six-site XXZ chain of Example~1 ($D_{\mathrm H}=57$, 4~K) with collective decay or local dephasing from $10^{-3}$ to $10$~meV, at two broadenings each (\texttt{bench\_preconditioner\_dissipative.py}). The ratio of the mean number of iterations (preconditioned over plain) lies between $3\times10^{-4}$ and $0.76$ in 28 of the 30 cases, with a plain GMRES that reaches 54\,000 iterations in one solve against 1\,114 preconditioned; the true residuals are comparable and below $10^{-10}$. Only a local dephasing rate of 10~meV, an order of magnitude above the energy scale of the chain and far from any use in Example~1, is slightly unfavorable: $1.20$ and $1.23$ (about 40 iterations against 33).
 
 \paragraph{Exact diagonal solve.}
 When the generator is exactly diagonal in the dyad basis $|x\rangle\langle y|$, which holds when every Hamiltonian block is a diagonal block of one sector (a model in its eigenbasis) and every collapse operator is a diagonal block too (none, or pure dephasing, possibly with complex diagonal entries), \(\mathcal{L}|x\rangle\langle y|=\mathcal{L}_{xy}|x\rangle\langle y|\) with
@@ -1023,7 +1023,7 @@ When the generator is exactly diagonal in the dyad basis $|x\rangle\langle y|$, 
 and \texttt{diagonal\_solve=True} (the default) solves every shifted system, direct or adjoint, by the element-wise division \(x=b/[(\eta-i\omega)-\mathcal{L}_{xy}]\), and the Hilbert-space resolvent of a diagonal Hamiltonian by \(x=b/[(\omega+i\eta)-E_x]\). This is the sum over states: exact to rounding, one pass over the vector, no iteration, whatever \(\eta\) and the dimension. The real part of \(\mathcal{L}_{xy}\) is not positive, so the denominator does not vanish for \(\eta>0\); for \(\eta=0\) on a pole the solver raises a \texttt{ConvergenceError} instead of dividing by zero. The backend attribute \texttt{generator\_is\_diagonal} says whether the generator qualifies; a collapse operator that moves population (\(|j\rangle\langle i|\)) or couples coherences, or a block that cannot be inspected (matrix-free), makes it false, and GMRES with the preconditioner above runs. \texttt{diagonal\_solve=False} keeps GMRES in every case, which is how the preconditioner is tested; the dense backend always inverts the matrix and serves as the independent reference.
 
 \paragraph{Restart of GMRES.}
-\texttt{resolvent\_restart=None} leaves the restart length to SciPy ($\min(20,n)$). A longer restart reduces the number of iterations but makes each of them dearer and stores $m+1$ Krylov vectors of $D_{\mathrm L}=D_{\mathrm H}^2$ entries ($85$~MB for $m=200$ at $D_{\mathrm H}=163$). No value wins on the problems measured, so the default is kept. Unpreconditioned solves of the thermal spin chain of Example~2 (\texttt{preconditioner=None}) took, per solve, with $m=20, 50, 100, 200$:
+\texttt{resolvent\_restart=None} leaves the restart length to SciPy ($\min(20,n)$). A longer restart reduces the number of iterations but makes each of them dearer and stores $m+1$ Krylov vectors of $D_{\mathrm L}=D_{\mathrm H}^2$ entries ($85$~MB for $m=200$ at $D_{\mathrm H}=163$). No value wins on the problems measured, so the default is kept. Unpreconditioned solves of the thermal spin chain of Example~1 (\texttt{preconditioner=None}) took, per solve, with $m=20, 50, 100, 200$:
 \begin{center}
 \begin{tabular}{lrrrr}
 \toprule
@@ -1035,7 +1035,7 @@ $D_{\mathrm H}=163$, $\eta=0.03$~meV & 1210 (1.4~s) & 1081 (1.7~s) & 939 (2.6~s)
 \bottomrule
 \end{tabular}
 \end{center}
-so that a long restart is worth ten at the smallest $\eta$ and costs a factor three at the largest dimension. The solves of Examples~1 and~3 and of the dissipative three-site chain take two or three iterations whatever the restart. With the preconditioner, which is the default whenever it is exact, the restart is immaterial for the models of the article.
+so that a long restart is worth ten at the smallest $\eta$ and costs a factor three at the largest dimension. The solves of the two-level system, of Example~2, and of the dissipative three-site chain take two or three iterations whatever the restart. With the preconditioner, which is the default whenever it is exact, the restart is immaterial for the models of the article.
 
 \begin{verbatim}
 solver = SpectroscopySolver(
@@ -1047,7 +1047,7 @@ solver = SpectroscopySolver(
 solver.feed_model(model, context=thermal_context)
 \end{verbatim}
 
-For the thermal spin chain of Example~2 (\(D=57\), \(\eta=0.03\)~meV), the mean
+For the thermal spin chain of Example~1 (\(D=57\), \(\eta=0.03\)~meV), the mean
 number of GMRES iterations per solve falls from about 640 to 1, and the time
 for a \(3\times3\) subgrid from 58~s to 0.4~s. The measurements as a function of
 \(D\) and \(\eta\) are given in Sec.~6 of the article and in
@@ -1342,7 +1342,7 @@ sign conventions should be encoded through \texttt{amplitude} or an explicit
 \subsubsection{Signatures and completeness}
 \label{sec:signatures}
 
-The pulse $j$ of a pathway radiates with the wave-vector sign $s_j=\Delta q_j$ ($+1$ for \texttt{Ku} and \texttt{Bd}, $-1$ for \texttt{Kd} and \texttt{Bu}), so that the signal is emitted in the direction $\sum_js_j\boldsymbol{k}_j$. The tuple $(s_1,\ldots,s_n)$ is the signature of the pathway, returned by \texttt{pathway\_signature(interactions)} and by the property \texttt{FrequencyPathway.signature}; \texttt{Interaction.sign} gives $s_j$. Rephasing is $(-,+,+)$, non-rephasing $(+,-,+)$ and the fifth-order double-quantum signal of Example~3 $(-,-,+,+,+)$.
+The pulse $j$ of a pathway radiates with the wave-vector sign $s_j=\Delta q_j$ ($+1$ for \texttt{Ku} and \texttt{Bd}, $-1$ for \texttt{Kd} and \texttt{Bu}), so that the signal is emitted in the direction $\sum_js_j\boldsymbol{k}_j$. The tuple $(s_1,\ldots,s_n)$ is the signature of the pathway, returned by \texttt{pathway\_signature(interactions)} and by the property \texttt{FrequencyPathway.signature}; \texttt{Interaction.sign} gives $s_j$. Rephasing is $(-,+,+)$, non-rephasing $(+,-,+)$ and the fifth-order double-quantum signal of Example~2 $(-,-,+,+,+)$.
 
 The signal of a signature is the sum over \emph{all} pathways with that signature, and a set written by hand can miss some. A sequence that vanishes for a ground-state model without relaxation can be non-zero with relaxation or with a thermal reference state: for the open two-level system, $(B_u,K_u,K_u)$ is non-zero because the radiative channel moves population to $\ket{g}$ during $t_2$, and it refills the ground-state bleach. The function
 \begin{verbatim}
