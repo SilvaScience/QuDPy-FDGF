@@ -129,6 +129,22 @@ def widths(labels, rows):
     return [lorentzian_halfwidth(labels, np.abs(row)) for row in rows]
 
 
+def amplitude_and_shape(fdgf, stored):
+    """|FDGF| against the stored samples -> (mean ratio in units of (N dt)^2, shape deviation).
+
+    The stored values are on the scale of the ``ifft2`` of the time-domain run, the continuous transform being
+    (N dt)^2 times larger, so the mean ratio of the amplitudes is 1 for a perfect agreement. The shape deviation is
+    the largest difference between the ten FDGF samples and the stored ones, rescaled by the mean ratio, divided by
+    the largest FDGF sample: the disagreement of the ten samples once the overall scale is removed, relative to the peak
+    of the cut.
+    """
+    stored = np.asarray(stored)
+    magnitude = np.abs(fdgf)
+    mean = float(np.mean(magnitude / stored))
+    deviation = float(np.max(np.abs(magnitude - mean * stored)) / np.max(magnitude))
+    return mean / AMPLITUDE_SCALE, deviation
+
+
 def compare_scenario(root, folder, changes):
     data = load_scenario(root, folder)
     report = {"changes": changes, "peaks": {}}
@@ -149,6 +165,14 @@ def compare_scenario(root, folder, changes):
             "X4_fdgf_physical_meV": widths(labels, action + [physical])[-1],
             "amplitude_ratio_X3": [float(np.mean(np.abs(c) / s)) / AMPLITUDE_SCALE for c, s in zip(coherent, stored_x3)],
             "amplitude_ratio_X4_unsigned": float(np.mean(np.abs(unsigned) / stored_x4[4])) / AMPLITUDE_SCALE,
+            # per diagram: R1, R2, R3 and the coherent sum; Q3a, Q4a, Q2b, Q8b (the action sum is not compared)
+            "diagram_amplitude_shape": {
+                name: amplitude_and_shape(signal, row)
+                for name, signal, row in zip(("R1", "R2", "R3", "coherent_sum"), coherent, stored_x3)
+            } | {
+                name: amplitude_and_shape(signal, row)
+                for name, signal, row in zip(("Q3a", "Q4a", "Q2b", "Q8b"), action, stored_x4[:4])
+            },
         }
     return report
 
