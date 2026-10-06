@@ -61,7 +61,7 @@ class SparseSectorBackend(BackendBase):
     def __init__(
         self,
         *,
-        eta=0.05,
+        eta=None,
         krylov_tolerance=1e-10,
         krylov_maxiter=None,
         resolvent_restart=None,

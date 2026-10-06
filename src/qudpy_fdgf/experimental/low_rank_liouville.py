@@ -195,7 +195,7 @@ class LowRankLiouvilleBackend(BackendBase):
     def __init__(
         self,
         *,
-        eta=0.05,
+        eta=None,
         low_rank_tolerance=1e-10,
         low_rank_absolute_tolerance=0.0,
         max_rank=64,

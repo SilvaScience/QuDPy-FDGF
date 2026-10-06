@@ -48,7 +48,7 @@ class DenseLiouvilleBackend(BackendBase):
     def __init__(
         self,
         *,
-        eta=0.05,
+        eta=None,
         cache_resolvents=True,
         max_cache_entries=32,
         **options,

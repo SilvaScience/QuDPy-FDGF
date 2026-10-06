@@ -5,6 +5,11 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 
 ## Unreleased
 
+### Breaking changes
+- `eta` has no default: `SpectroscopySolver(...)`, `DenseLiouvilleBackend` and `SparseSectorBackend`
+  raise a `ValueError` that explains the parameter when it is missing (the former `0.05` has no
+  meaning without a unit). Negative, infinite and NaN values are rejected.
+
 ### Changed
 - `generate_spectrum` (and `generate_nq_spectrum`) evaluate a grid with `strategy="auto"` by
   default: when at least two axes are scanned and the factorized evaluation needs fewer solves, each

@@ -20,6 +20,7 @@ from .backends import (
 )
 from .capabilities import Capabilities, ModelRequirements
 from .diagnostics import decay_rates
+from .backends.base import require_eta
 from .factorized import evaluate_factorized, pathway_operations, plan_factorization
 from .exceptions import (
     CapabilityError,
@@ -47,7 +48,7 @@ class SpectroscopySolver:
         self,
         *,
         backend="sparse_sector",
-        eta=0.05,
+        eta=None,
         requirements=None,
         thermodynamic_context=None,
         check_stationarity="warn",
@@ -55,7 +56,7 @@ class SpectroscopySolver:
         **backend_options,
     ):
         self.backend_name = str(backend).lower()
-        self.eta = float(eta)
+        self.eta = require_eta(eta)
         check_stationarity = str(check_stationarity).lower()
         if check_stationarity not in ("warn", "error", "off"):
             raise ValueError(

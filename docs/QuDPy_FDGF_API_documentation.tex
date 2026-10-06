@@ -383,7 +383,7 @@ At zero temperature, the population is shared among all globally degenerate grou
 \begin{verbatim}
 SpectroscopySolver(
     backend="sparse_sector",
-    eta=0.05,
+    eta=...,                    # required, no default
     requirements=None,
     thermodynamic_context=None,
     check_stationarity="warn",
@@ -391,7 +391,7 @@ SpectroscopySolver(
     **backend_options
 )
 \end{verbatim}
-The arguments \texttt{check\_stationarity} and \texttt{stationarity\_tolerance} control the check of the reference state described below.
+The broadening \texttt{eta} is required and has no default. It is the homogeneous linewidth of the frequency-domain resolvents $[(\eta-i\omega)\mathbb{1}-\mathcal{L}]^{-1}$ (a line of decay rate $\Gamma$ becomes a Lorentzian of half width $\Gamma+\eta$) and is expressed in the unit of the Hamiltonian, so that no number is reasonable for every model. A missing \texttt{eta}, or a negative, infinite or NaN one, raises \texttt{ValueError}, from the solver and from the backends alike. The arguments \texttt{check\_stationarity} and \texttt{stationarity\_tolerance} control the check of the reference state described below.
 
 When \texttt{backend="auto"} is selected, the solver compares the effective model requirements with the declared capabilities of the registered backends. Built-in and custom backends are listed by \texttt{available\_backends()} and custom implementations are added with \texttt{register\_backend(name, backend\_class)}.
 
@@ -411,7 +411,7 @@ The method \texttt{feed\_model(model, context=None)} connects a \texttt{SectorMo
 The optional \texttt{context} argument overrides the thermodynamic context provided to the constructor when it is not \texttt{None}. The method return the solver instance itself, allowing chained construction:
 \begin{verbatim}
     solver = (
-    SpectroscopySolver(backend="sparse_sector")
+    SpectroscopySolver(backend="sparse_sector", eta=0.002)
     .feed_model(model, context=context))
 \end{verbatim}
 

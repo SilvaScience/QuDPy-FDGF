@@ -102,7 +102,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `150 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `158 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -256,6 +256,12 @@ direct resolvent
 \[
 \left[(\eta-i\omega)I-\mathcal A\right]^{-1}.
 \]
+
+The broadening \(\eta\) is the homogeneous linewidth that this regularization adds: a line of
+decay rate \(\Gamma\) becomes a Lorentzian of half width \(\Gamma+\eta\). It is in the unit of the
+Hamiltonian and it has no default; `SpectroscopySolver(...)` and the backends raise a `ValueError`
+when `eta` is missing, because a value that is reasonable for a Hamiltonian in eV is meaningless in
+cm\(^{-1}\).
 
 No global \(-i\) factor is included in this resolvent. The pathway's
 perturbative coefficient therefore directly carries the

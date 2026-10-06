@@ -84,5 +84,5 @@ def test_hilbert_resolvent_is_unchanged():
 
 def test_unknown_preconditioner_is_rejected():
     with pytest.raises(ValueError, match="preconditioner"):
-        SpectroscopySolver(backend="sparse_sector", preconditioner="ilu").feed_model(
+        SpectroscopySolver(backend="sparse_sector", eta=ETA, preconditioner="ilu").feed_model(
             three_site_chain())

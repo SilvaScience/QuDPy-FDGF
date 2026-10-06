@@ -29,6 +29,22 @@ from ..generators import EvolutionGenerator, operator_matmat, operator_rmatmat
 from ..observables import ObservableSpec
 
 
+def require_eta(eta):
+    """Broadening -> validated float; a missing value is an error, not a silent default."""
+    if eta is None:
+        raise ValueError(
+            "eta is required: it is the homogeneous broadening of the frequency-domain "
+            "resolvents [(eta - i omega) - L]^-1, in the same unit as the Hamiltonian, and it "
+            "sets the width of every line in the spectrum (a line of decay rate G is a "
+            "Lorentzian of half width G + eta). Pass eta=... to SpectroscopySolver or to the "
+            "backend, for example eta=0.002 for a Hamiltonian in eV."
+        )
+    eta = float(eta)
+    if not np.isfinite(eta) or eta < 0:
+        raise ValueError("eta must be finite and non-negative.")
+    return eta
+
+
 def apply_operator(operator, vector):
     """Array, sparse matrix, or operator and vector -> operator action."""
     if hasattr(operator, "matvec"):
@@ -147,11 +163,8 @@ class BackendBase(ABC):
         matrix_free=True,
     )
 
-    def __init__(self, *, eta=0.05, **options):
-        eta = float(eta)
-        if eta < 0:
-            raise ValueError("eta must be non-negative.")
-        self.eta = eta
+    def __init__(self, *, eta=None, **options):
+        self.eta = require_eta(eta)
         self.options = dict(options)
         self.model = None
         self.model_capabilities = Capabilities()
