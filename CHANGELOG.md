@@ -9,6 +9,13 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 - `eta` has no default: `SpectroscopySolver(...)`, `DenseLiouvilleBackend` and `SparseSectorBackend`
   raise a `ValueError` that explains the parameter when it is missing (the former `0.05` has no
   meaning without a unit). Negative, infinite and NaN values are rejected.
+- `EigenbasisKModel` and `ExcitationSectorModel`: `boltzmann_constant` no longer defaults to the
+  value in eV/K. New argument `energy_unit` (`"eV"`, `"meV"`, `"cm-1"`, `"THz"`; the last is the
+  ordinary frequency E/h, k_B/h = 0.0208 THz/K) sets it; `boltzmann_constant` explicit is still
+  accepted (in the unit of the Hamiltonian per kelvin); both together, an unknown unit or a
+  non-positive constant raise `ValueError`. A temperature above zero without either now raises a
+  `ValueError` at `feed_model` instead of silently using eV/K; zero temperature needs neither.
+  A model that ran in eV with a thermal state must now say `energy_unit="eV"`.
 
 ### Changed
 - `generate_spectrum` (and `generate_nq_spectrum`) evaluate a grid with `strategy="auto"` by

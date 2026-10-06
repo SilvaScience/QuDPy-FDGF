@@ -53,7 +53,7 @@ def three_site_chain(dissipative=True):
     return ExcitationSectorModel({"0": np.zeros((1, 1), dtype=complex), "1": H1, "2": H2},
                                  {("1", "0"): up10, ("2", "1"): up21},
                                  c_ops_raw=c_ops if dissipative else (),
-                                 initial_sector="0")
+                                 initial_sector="0", energy_unit="eV")
 
 
 def reference_generator_action(generator, matrix, adjoint=False):

@@ -102,7 +102,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `158 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `174 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -224,6 +224,18 @@ solver.feed_model(model, context=context)
 
 `equilibrium_state(context)` must return the exact thermal state in the
 truncated basis built by the model.
+
+The adapters `EigenbasisKModel` and `ExcitationSectorModel` build the Gibbs state from the Boltzmann
+constant in the unit of the Hamiltonian, which has no default: pass `energy_unit="eV"`, `"meV"`,
+`"cm-1"` or `"THz"` (the ordinary frequency E/h), or `boltzmann_constant=...` per kelvin in
+that unit, to the model. A temperature above zero without either raises a `ValueError` at
+`feed_model` (a wrong unit would give a wrong thermal state without any warning); zero
+temperature needs neither.
+
+```python
+model = ExcitationSectorModel(hamiltonians, raising_blocks, initial_sector=0, energy_unit="meV")
+solver.feed_model(model, context=ThermodynamicContext(temperature=4.0))
+```
 
 The perturbative response assumes that the reference state does not evolve before the first
 pulse, `L rho_ref = 0`. The Gibbs state of `H` is stationary for a closed model, but with

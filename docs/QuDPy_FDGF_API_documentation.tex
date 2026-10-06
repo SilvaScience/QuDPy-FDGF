@@ -225,7 +225,8 @@ EigenbasisKModel(
     rwa_tol=1e-6,
     transition_window=None,
     k_weights=None,
-    boltzmann_constant=8.617333262e-5,
+    energy_unit=None,
+    boltzmann_constant=None,
 )
 \end{verbatim}
 
@@ -316,7 +317,7 @@ with
     \beta = \frac{1}{k_B T}
 \end{equation}
 
-where the configurable \texttt{boltzmann\_constant} must use units consistent with the Hamiltonian. At zero temperature, degenerate lowest states within each sector share its weight. The present adapter treats the $k$ sectors independently and preserves the fixed $k$ weights.
+where $k_B$ must be in the unit of the Hamiltonian per kelvin. It has no default, because a wrong unit gives a wrong thermal state without any warning: pass \texttt{energy\_unit} (Sec.~\ref{sec:energy-units}) or \texttt{boltzmann\_constant} to the model, otherwise a temperature above zero raises \texttt{ValueError} at \texttt{feed\_model}. At zero temperature, degenerate lowest states within each sector share its weight. The present adapter treats the $k$ sectors independently and preserves the fixed $k$ weights.
 
 \subsubsection{Dissipative channels and backend requirements}
 Each raw collapse-operator pair ($\hat{L}_c$, $\gamma_c$) is transformed into the eigenbasis of every $k$-sector. The resulting channel has a generated name such as \texttt{c\_op\_0} and contains only intra-sector blocks, 
@@ -342,7 +343,8 @@ ExcitationSectorModel(
     c_ops_raw=(),
     initial_sector=None,
     initial_state_index=0,
-    boltzmann_constant=8.617333262e-5,
+    energy_unit=None,
+    boltzmann_constant=None,
 )
 \end{verbatim}
 The Hamiltonian mapping contains one dense Hermitian block per sector. All operator mappings use \texttt{(target, source)} sector keys. Each sector Hamiltonian is diagonalized as
@@ -365,7 +367,24 @@ The default initial sector is the one containing the global lowest eigenenergy u
     \ket{s,i}\bra{s,i},
     \qquad Z=\sum_{s,i}\exp(-\beta E_{si}).
 \end{equation}
-At zero temperature, the population is shared among all globally degenerate ground states. The configurable Boltzmann constant again fixes the energy--temperature unit conversion.
+At zero temperature, the population is shared among all globally degenerate ground states. The Boltzmann constant again fixes the energy--temperature unit conversion and again has no default (Sec.~\ref{sec:energy-units}).
+
+\paragraph{Energy unit and Boltzmann constant.}
+\label{sec:energy-units}
+Both adapters take \texttt{energy\_unit=None} and \texttt{boltzmann\_constant=None}. A thermal state ($T>0$) needs $k_B$ in the unit of the Hamiltonian per kelvin, given by one of the two arguments:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\texttt{energy\_unit} & unit of the Hamiltonian & $k_B$ per kelvin\\
+\midrule
+\texttt{"eV"} & electronvolt & $8.617333262\times10^{-5}$\\
+\texttt{"meV"} & millielectronvolt & $8.617333262\times10^{-2}$\\
+\texttt{"cm-1"} & wavenumber & $0.6950348004$\\
+\texttt{"THz"} & ordinary frequency $E/h$ & $2.083661912\times10^{-2}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+(CODATA 2018.) \texttt{"THz"} is the ordinary frequency $\nu=E/h$, so $k_B/h=0.0208\,\mathrm{THz/K}$; a Hamiltonian in angular frequency (rad/ps) needs $k_B/\hbar=0.1309\,\mathrm{rad\,ps^{-1}/K}$ and is passed through \texttt{boltzmann\_constant}. Giving both arguments, an unknown unit or a non-positive, infinite or NaN constant raises \texttt{ValueError}. With neither, a temperature of zero is accepted, since no $k_B$ enters, and a temperature above zero raises a \texttt{ValueError} that lists the options when the model is registered with \texttt{feed\_model}. A model written by the user supplies its own thermal state and is not affected.
 
 
 
