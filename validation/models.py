@@ -1,4 +1,4 @@
-"""The three models of the QuDPy-FDGF article, built with QuTiP.
+"""The four models of the QuDPy-FDGF examples, built with QuTiP.
 
 Shared by the analysis notebooks, the benchmark scripts and the check scripts of this folder.
 The example notebooks in ``examples/`` write the same models out in full, so that each can be
@@ -8,9 +8,11 @@ read on its own; ``tests/test_validation_models.py`` checks that both give the s
 - Example 2: thermal XXZ spin chain with L sites and a magnon cutoff N_max
   (examples/example2_xxz_chain_thermal.ipynb);
 - Example 3: two coupled anharmonic bosonic modes, fifth-order 2Q response
-  (examples/example3_chi5_2q.ipynb).
+  (examples/example3_chi5_2q.ipynb);
+- Example 4: two coupled dissipative bosonic modes, coherent versus action detection
+  (examples/example4_coupled_modes_detection.ipynb).
 
-Units: hbar = 1; Examples 1 and 3 in eV, Example 2 in meV (field in tesla, temperature in K).
+Units: hbar = 1; Examples 1, 3 and 4 in eV, Example 2 in meV (field in tesla, temperature in K).
 """
 from itertools import combinations
 from math import comb
@@ -190,3 +192,60 @@ def example3_pathways(max_manifold=None):
     generator.maximum_manifold = EX3["max_manifold"] if max_manifold is None else max_manifold
     generator.efield_times = [np.array([0.0, 0.0])] * 5
     return translate_ufss_diagrams(generator.get_diagrams(np.arange(5, dtype=float)), component="chi5_2q")
+
+
+# ============================================================================= Example 4
+# Two coupled, weakly anharmonic bosonic modes (three levels each, D = 9) with five kinds of dissipation,
+# probed by coherent emission and by action (photoluminescence-type) detection of the same rephasing pathways.
+EX4 = dict(omega_a=1.0, omega_b=1.2, coupling=0.001, anharmonicity=0.010, mu_a=1.0, mu_b=1.0,
+           gamma_phi=0.010, k_relax=0.001, k_transfer=0.005, k_rad=0.0001, eta=1e-5, t2=10.0)
+EX4_AXES = {"omega_1q": np.linspace(-1.30, -0.90, 201), "omega_emit": np.linspace(0.90, 1.30, 201)}
+EX4_PATHWAYS = (
+    FrequencyPathway(name="R_GSB", interactions=("Bu", "Bd", "Ku"), component="rephasing", detection="polarization"),
+    FrequencyPathway(name="R_SE", interactions=("Bu", "Ku", "Bd"), component="rephasing", detection="polarization"),
+    FrequencyPathway(name="R_ESA", interactions=("Bu", "Ku", "Ku"), component="rephasing", detection="polarization"),
+)
+EX4_PROTOCOL = EX1_PROTOCOL
+
+
+def example4_operators(**changes):
+    """Operators of Example 4: dict with H, mu_plus, channels [(operator, rate)] and the detector operators.
+
+    ``changes`` replaces entries of EX4 (for instance ``k_transfer=0.010``). The detectors are the transition
+    operator mu (coherent emission), the projector A_PL = |e_a><e_a| + |e_b><e_b| on the two one-quantum
+    eigenstates, the unbalanced projector 2|e_a><e_a| + |e_b><e_b|, and the excitation number N_exc.
+    """
+    p = {**EX4, **changes}
+    levels = 3
+    a = qt.tensor(qt.destroy(levels), qt.qeye(levels))
+    b = qt.tensor(qt.qeye(levels), qt.destroy(levels))
+    n_a, n_b = a.dag() * a, b.dag() * b
+    one = qt.qeye([levels, levels])
+    H = (p["omega_a"] * n_a + p["omega_b"] * n_b
+         + 0.5 * p["anharmonicity"] * (n_a * (n_a - one) + n_b * (n_b - one))
+         + p["coupling"] * (a.dag() * b + b.dag() * a))
+    mu_plus = p["mu_a"] * a.dag() + p["mu_b"] * b.dag()
+    mu = mu_plus + mu_plus.dag()
+    drop = qt.Qobj(np.array([[0, 1, 0], [0, 0, 0], [0, 0, 0]]))        # |0><1| on one mode
+    a_drop, b_drop = qt.tensor(drop, qt.qeye(levels)), qt.tensor(qt.qeye(levels), drop)
+    channels = [(n_a, p["gamma_phi"]), (n_b, p["gamma_phi"]),
+                (a, p["k_relax"]), (b, p["k_relax"]),
+                (a_drop.dag() * b_drop, p["k_transfer"]),
+                (a_drop, p["k_rad"]), (b_drop, p["k_rad"])]
+    energies, eigenstates = H.eigenstates()
+    e_a, e_b = eigenstates[1], eigenstates[2]                          # the two one-quantum eigenstates
+    detectors = {"polarization": mu,
+                 "A_PL": e_a * e_a.dag() + e_b * e_b.dag(),
+                 "A_PL_unbalanced": 2 * e_a * e_a.dag() + e_b * e_b.dag(),
+                 "N_exc": n_a + n_b}
+    return dict(H=H, mu_plus=mu_plus, channels=channels, detectors=detectors)
+
+
+def example4_model(**changes):
+    """EigenbasisKModel of Example 4 (see example4_operators for ``changes``)."""
+    operators = example4_operators(**changes)
+    mu_plus = operators["mu_plus"]
+    return EigenbasisKModel(operators["H"], operators["detectors"]["polarization"], c_ops_raw=operators["channels"],
+                            j_plus_array=mu_plus, j_minus_array=mu_plus.dag(),
+                            detection_op_array=operators["detectors"]["polarization"],
+                            observable_op_arrays=operators["detectors"])

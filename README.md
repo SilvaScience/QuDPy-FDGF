@@ -28,7 +28,7 @@ transitions, initial state, and observable.
 | SciPy | 1.10 or later | core (Krylov, GMRES) | 1.18.0 |
 | Matplotlib | 3.7 or later | `SpectroscopyPlotter` and figures | 3.11.0 |
 | QuTiP | optional | physical operators in the examples | 5.3.0 |
-| UFSS | optional | automatic pathway generation (Example 3) | 0.2.5 |
+| UFSS | optional | automatic pathway generation (Examples 1, 3 and 4) | 0.2.5 |
 | pytest | optional | test suite | 9.1.1 |
 | psutil, nbformat, nbclient | optional | `validation/` (memory, command-line notebooks) | 7.2.2, 5.11.1, 0.11.0 |
 
@@ -55,7 +55,7 @@ src/qudpy_fdgf/          the package (generic engine, no physical model)
     plotting.py          SpectroscopyPlotter
     capabilities.py, exceptions.py
     experimental/        low-rank and tensor-network prototypes (not part of the released API)
-examples/                quickstart.py and the three examples of the article as notebooks
+examples/                quickstart.py and the four examples as notebooks
     old_scripts/         earlier versions of the examples, kept until the review is finished
 validation/              models.py, analysis/, benchmarks/, results/ (see validation/README.md)
 tests/                   api/ (contracts and options), physics/ (closed-form results and limits),
@@ -102,18 +102,17 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `207 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `211 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 4 tests).
 
 ## Examples, tests, and validation
 
 - `examples/quickstart.py`: open two-level system, linear and third-order rephasing responses,
   with analytical checks (about 2 s). It is the Quick start of the API documentation.
-- `examples/example{1,2,3}_*.ipynb`: the three examples of the manuscript, as notebooks (see
-  `examples/README.md`).
+- `examples/example{1,2,3,4}_*.ipynb`: the examples, as notebooks (see `examples/README.md`).
 - `python -m pytest`: runs `tests/` in about 15 s (`-m "not slow"` skips the slowest). `tests/api/`
   checks the contracts and options of the library, `tests/physics/` checks closed-form results and
   limiting cases of the manuscript (Example 1 formulas, exact jump integral, decay rates, harmonic
-  cancellation at fifth order). `tests/regression/` compares eight small calculations (two-level
+  cancellation at fifth order, the excitation-number action identity of Example 4). `tests/regression/` compares eight small calculations (two-level
   system, dissipative and thermal chains, time-domain route, fifth-order bosons) with stored outputs
   (`data/snapshots.npz`); regenerate them only on purpose with
   `python tests/regression/generate_snapshots.py`.

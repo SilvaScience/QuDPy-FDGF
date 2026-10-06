@@ -1,6 +1,6 @@
 # Validation
 
-Everything that checks and measures the three examples of the QuDPy-FDGF article, apart from the
+Everything that checks and measures the examples of QuDPy-FDGF, apart from the
 examples themselves (`../examples/`). The folder separates two kinds of questions:
 
 - **analysis**: is the result right and converged? (convergence, analytical limits, backend agreement)
@@ -8,7 +8,7 @@ examples themselves (`../examples/`). The folder separates two kinds of question
 
 ```text
 validation/
-  models.py             The three models, built with QuTiP, with their pathways, protocols and grids.
+  models.py             The four models, built with QuTiP, with their pathways, protocols and grids.
                         Used by the analysis notebooks and the benchmark scripts.
   cases.py              Extra Example 3 calculations for the figures, cached in results/data/
   analysis/             example{1,2,3}_analysis.ipynb, plus the scripts that draw the article figures

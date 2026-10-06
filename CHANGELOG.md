@@ -92,6 +92,18 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   pair of delays separately.
 
 ### Added
+- Example 4 (`examples/example4_coupled_modes_detection.ipynb`, model in `validation/models.py`): two coupled
+  anharmonic bosonic modes with three levels each (D = 9) and seven GKSL channels (pure dephasing, relaxation
+  cascade, downhill population transfer, radiative decay), after the two-mode model of the Perspective on
+  detection-dependent dephasing in 2DES (Paiva-Ortega et al., 2026; parameters recovered from the group's scripts).
+  It follows the structure of the other examples: model, `decay_rates()` checked against the eigenvalues of the QuTiP
+  Liouvillian (5.55 and 8.05 meV for the two diagonal coherences), hand-written and UFSS pathways, coherent emission and
+  three action readouts (photoluminescence-type projector with equal and unbalanced weights, excitation number) from one
+  propagation, antidiagonal linewidths at two transfer rates, and two verifications: the excitation-number action signal
+  equals -i times the polarization to 3e-16 with dissipation present (each readout alternative alone breaks it), and a
+  single pathway has the width of the declared rates to about 1 %. Results in `validation/results/data/example4.npz`.
+  `tests/physics/test_action_number_identity.py` checks the identity (211 tests, plus 4 in the local
+  `tests/consistency/`). The comparison with the published linewidths and with the time-domain QuDPy is not done yet.
 - `solver.steady_state(check_unique=None)`: the stationary state of the generator as a `DensityState`
   (`L rho = 0`, `Tr rho = 1`), from `(L + |r>><<1|) x = r` with `Tr r = 1`: dense LU or matrix-free GMRES
   (restart 100, 100 restart cycles unless `krylov_maxiter`, `ConvergenceError` beyond). Diagnostics in
