@@ -26,7 +26,8 @@ omega_emit = np.linspace(1.42, 1.66, 31)
 def calculate(backend):
     model = example3_model()
     pathways = example3_pathways()
-    solver = SpectroscopySolver(backend=backend, eta=ETA, max_cache_entries=4096)
+    solver = SpectroscopySolver(backend=backend, eta=ETA, max_cache_entries=4096,
+                                preconditioner=None)       # plain GMRES: the baseline of the comparison
     solver.feed_model(model)
     solver.set_pathways(pathways)
     start = time.perf_counter()

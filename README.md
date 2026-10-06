@@ -102,7 +102,7 @@ and saves its results in `validation/results/data/example1.npz`.
 python -m pytest
 ```
 
-Expected: `174 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `183 passed` in about 20 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
@@ -592,9 +592,13 @@ solver.feed_model(model)
 - matrix-free Hilbert-space resolvent solved with GMRES;
 - exact frequency-domain pathways through matrix-free Liouville action;
 - factorized evaluation of grids (adjoint resolvents, propagators and interactions, shared prefixes);
-- optional diagonal preconditioner for the GMRES solves (`preconditioner="diagonal"`): exact, hence
-  one iteration per solve, for a closed model in its eigenbasis; only approximate with collapse
-  channels that couple coherences;
+- diagonal preconditioner for the GMRES solves: `preconditioner="auto"` (default) switches it on exactly
+  when it is exact, hence one iteration per solve, that is when the Hamiltonian blocks and the collapse
+  operators are diagonal (a closed model in its eigenbasis, pure dephasing), and off otherwise;
+  `"diagonal"` forces it (approximate with collapse channels that couple coherences) and `None` gives
+  plain GMRES; the choice is in `backend.preconditioner` and `diagnostics["solver"]["preconditioner"]`;
+- GMRES restart: `resolvent_restart=None` keeps SciPy's 20; no other value wins on the examples
+  (see the CHANGELOG), and `m` costs `(m + 1) D^2` complex numbers;
 - no explicit Liouville matrix.
 
 The frequency-domain path still uses a density vector of size \(D^2\). It

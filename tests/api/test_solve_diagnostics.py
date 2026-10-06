@@ -19,7 +19,7 @@ def run(backend, *, model=None, strategy="auto", **options):
 
 
 def test_sparse_result_reports_iterations_and_true_relative_residuals():
-    solver, result = run("sparse_sector", krylov_tolerance=1e-10)
+    solver, result = run("sparse_sector", krylov_tolerance=1e-10, preconditioner=None)
     info = result.diagnostics["solver"]
     assert info["method"] == "gmres"
     assert info["solves"] == result.diagnostics["resolvent_solves"] > 0
@@ -29,8 +29,8 @@ def test_sparse_result_reports_iterations_and_true_relative_residuals():
 
 
 def test_pointwise_and_factorized_report_the_same_kind_of_statistics():
-    _, pointwise = run("sparse_sector", strategy="pointwise")
-    _, factorized = run("sparse_sector", strategy="factorized")
+    _, pointwise = run("sparse_sector", strategy="pointwise", preconditioner=None)
+    _, factorized = run("sparse_sector", strategy="factorized", preconditioner=None)
     assert pointwise.diagnostics["solver"]["solves"] > factorized.diagnostics["solver"]["solves"]
     for result in (pointwise, factorized):
         assert result.diagnostics["solver"]["relative_residual_max"] <= 1e-9
@@ -58,7 +58,8 @@ def test_exact_diagonal_preconditioner_needs_one_iteration_and_leaves_no_residua
 
 
 def test_records_give_one_entry_per_solve():
-    solver, result = run("sparse_sector", krylov_tolerance=1e-10, record_solves=True, strategy="factorized")
+    solver, result = run("sparse_sector", krylov_tolerance=1e-10, record_solves=True, strategy="factorized",
+                          preconditioner=None)
     info = result.diagnostics["solver"]
     records = info["records"]
     assert len(records) == info["solves"]
@@ -99,7 +100,7 @@ def test_condition_estimate_bounds_the_shifted_systems_of_a_normal_generator(dis
 
 
 def test_forward_error_of_a_loose_solve_is_below_the_condition_estimate_times_the_residual():
-    solver, _ = run("sparse_sector", krylov_tolerance=1e-6)
+    solver, _ = run("sparse_sector", krylov_tolerance=1e-6, preconditioner=None)
     base = solver.backend
     dense = SpectroscopySolver(backend="dense", eta=ETA)
     dense.feed_model(three_site_chain(dissipative=False))
@@ -127,7 +128,7 @@ def test_no_frequency_interval_means_no_condition_estimate():
 
 
 def test_hilbert_resolvent_reports_iterations_and_relative_residual():
-    solver = SpectroscopySolver(backend="sparse_sector", eta=ETA, krylov_tolerance=1e-10)
+    solver = SpectroscopySolver(backend="sparse_sector", eta=ETA, krylov_tolerance=1e-10, preconditioner=None)
     solver.feed_model(three_site_chain(dissipative=False))
     vector = np.random.default_rng(1).normal(size=solver.backend.layout.total_dimension)
     _, info = solver.backend.solve_hilbert_resolvent(vector, 2.01)

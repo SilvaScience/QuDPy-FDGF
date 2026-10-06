@@ -10,6 +10,7 @@ from collections import OrderedDict
 import hashlib
 
 import numpy as np
+from scipy.sparse import issparse
 from scipy.sparse.linalg import LinearOperator, expm_multiply, gmres
 
 from .base import BackendBase
@@ -19,18 +20,36 @@ from ..observables import ObservableSpec
 from ..results import PathwayResult
 
 
+def _is_diagonal(operator, tolerance=1e-12):
+    """Whether an array or sparse block is diagonal; anything else (matrix-free) is not known to be."""
+    if issparse(operator):
+        coordinates = operator.tocoo()
+        data = np.abs(coordinates.data)
+        scale = float(data.max()) if data.size else 0.0
+        off = data[coordinates.row != coordinates.col]
+        return bool(off.size == 0 or off.max() <= tolerance * max(scale, np.finfo(float).tiny))
+    if isinstance(operator, np.ndarray) and operator.ndim == 2 and operator.shape[0] == operator.shape[1]:
+        scale = float(np.abs(operator).max()) if operator.size else 0.0
+        off = np.abs(operator - np.diag(np.diag(operator)))
+        return bool(off.max(initial=0.0) <= tolerance * max(scale, np.finfo(float).tiny))
+    return False
+
+
 class SparseSectorBackend(BackendBase):
     """Pathway inputs -> sparse ket/bra branch propagation.
 
     Time evolution and Hilbert resolvents remain matrix-free.
     ``preconditioner="diagonal"`` preconditions every GMRES resolvent with the
     inverse of the shifted diagonal of the generator (or of the Hamiltonian).
-    The diagonal is exact for a closed model supplied in its eigenbasis, so
-    each solve then converges in one iteration; with collapse channels that
-    couple dyads it remains an approximation.
+    The diagonal is exact when the generator is diagonal in the dyad basis, that
+    is for a model supplied in its eigenbasis (diagonal Hamiltonian blocks) whose
+    collapse operators, if any, are diagonal too: each solve then converges in one
+    iteration. With collapse channels that couple dyads it remains an approximation.
+    The default ``"auto"`` selects ``"diagonal"`` in exactly the cases where it is
+    exact and ``None`` otherwise; ``self.preconditioner`` holds the choice made.
     """
 
-    preconditioners = (None, "diagonal")
+    preconditioners = (None, "diagonal", "auto")
 
     name = "sparse_sector"
     supports_factorized = True
@@ -65,7 +84,7 @@ class SparseSectorBackend(BackendBase):
         krylov_tolerance=1e-10,
         krylov_maxiter=None,
         resolvent_restart=None,
-        preconditioner=None,
+        preconditioner="auto",
         cache_propagations=True,
         max_cache_entries=32,
         **options,
@@ -73,10 +92,11 @@ class SparseSectorBackend(BackendBase):
         super().__init__(eta=eta, **options)
         if preconditioner not in self.preconditioners:
             raise ValueError(
-                "preconditioner must be None or 'diagonal'; "
+                "preconditioner must be None, 'diagonal' or 'auto'; "
                 f"got {preconditioner!r}."
             )
-        self.preconditioner = preconditioner
+        self.preconditioner_option = preconditioner
+        self.preconditioner = None if preconditioner == "auto" else preconditioner
         self.krylov_tolerance = float(krylov_tolerance)
         self.krylov_maxiter = (
             None if krylov_maxiter is None else int(krylov_maxiter)
@@ -94,8 +114,29 @@ class SparseSectorBackend(BackendBase):
         self._hamiltonian_diagonal = None
         self._initial_density_vector = None
 
+    def _generator_is_diagonal(self):
+        """Whether the generator is diagonal in the dyad basis, so that the diagonal preconditioner is exact.
+
+        True when every Hamiltonian block is a diagonal block of one sector (a model in its
+        eigenbasis, no coupling between sectors) and every collapse operator is diagonal as well,
+        which includes the closed models. Blocks that are neither arrays nor sparse matrices
+        cannot be inspected and count as not diagonal.
+        """
+        for source, blocks in self._hamiltonian_blocks.items():
+            for target, operator in blocks.items():
+                if target != source or not _is_diagonal(operator):
+                    return False
+        for channel in self._collapse_channels:
+            for source, blocks in channel.operator_blocks.items():
+                for target, operator in blocks.items():
+                    if target != source or not _is_diagonal(operator):
+                        return False
+        return True
+
     def build(self, model, context=None):
         super().build(model, context=context)
+        if self.preconditioner_option == "auto":
+            self.preconditioner = "diagonal" if self._generator_is_diagonal() else None
         self._liouville = self.generator.linear_operator
         self._liouville_diagonal = None
         self._hamiltonian_diagonal = None

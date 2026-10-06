@@ -932,10 +932,10 @@ The options below are passed to \texttt{SpectroscopySolver} together with
     required from each GMRES solve;
     \item \texttt{krylov\_maxiter} (default \texttt{None}): maximum number of
     GMRES iterations; \texttt{None} leaves the choice to SciPy;
-    \item \texttt{resolvent\_restart} (default \texttt{None}): restart length
-    of GMRES;
-    \item \texttt{preconditioner} (default \texttt{None}): \texttt{None} or
-    \texttt{"diagonal"}, see below; any other value raises a
+    \item \texttt{resolvent\_restart} (default \texttt{None}, that is the
+    SciPy default of 20): restart length of GMRES, see below;
+    \item \texttt{preconditioner} (default \texttt{"auto"}): \texttt{"auto"},
+    \texttt{"diagonal"} or \texttt{None}, see below; any other value raises a
     \texttt{ValueError};
     \item \texttt{cache\_propagations} (default \texttt{True}) and
     \texttt{max\_cache\_entries} (default 32): caching of propagated states and
@@ -962,7 +962,7 @@ whatever the dimension. For a dissipative generator the same resolvent has trace
 Reducing the residual is a matter of \texttt{krylov\_tolerance}. Iterative refinement, which solves $S\,\delta=b-Sx$ and updates $x$, was evaluated and is not offered: each step costs as many GMRES iterations as the solve it corrects, so that reaching $5\times10^{-13}$ from $10^{-6}$ takes 36 iterations, summed over four frequencies, on the thermal four-site chain at $\eta=0.03$~meV, whereas a solve with \texttt{krylov\_tolerance=1e-12} takes 28 for an error of $9\times10^{-16}$.
 
 \paragraph{Diagonal preconditioner.}
-With \texttt{preconditioner="diagonal"}, each GMRES solve of the Liouville
+With \texttt{preconditioner="diagonal"} (and with the default \texttt{"auto"} whenever it is exact, see below), each GMRES solve of the Liouville
 resolvent is preconditioned by the inverse of the shifted diagonal of the
 generator,
 
@@ -981,10 +981,28 @@ operators in the eigenbasis of the Hamiltonian (sector by sector for
 \texttt{ExcitationSectorModel}). The generator of a closed model, one without
 collapse channels, is then diagonal, and the preconditioner is exact: every
 GMRES solve converges in one iteration, for any \(\eta\) and any dimension.
+It stays exact when every collapse operator is diagonal in that basis, as for pure dephasing.
 With collapse channels that couple coherences the diagonal is only an
 approximation: the number of iterations decreases but still depends on
 \(\eta\). The preconditioner does not change the result beyond the solver
 tolerance.
+
+The default \texttt{preconditioner="auto"} applies the diagonal preconditioner in exactly the cases in which it is exact, and none otherwise: every Hamiltonian block must be a diagonal block of a single sector (a model in its eigenbasis, without coupling between sectors) and every collapse operator must be diagonal in the same sense. Blocks that are arrays or sparse matrices are inspected (off-diagonal entries below $10^{-12}$ of the largest entry count as zero); matrix-free blocks cannot be, and the preconditioner is then left off. The choice made is stored in \texttt{backend.preconditioner} and reported as \texttt{diagnostics["solver"]["preconditioner"]}. \texttt{None} always gives plain GMRES and \texttt{"diagonal"} forces the preconditioner, which is valid for any model but only approximate unless the generator is diagonal.
+
+\paragraph{Restart of GMRES.}
+\texttt{resolvent\_restart=None} leaves the restart length to SciPy ($\min(20,n)$). A longer restart reduces the number of iterations but makes each of them dearer and stores $m+1$ Krylov vectors of $D_{\mathrm L}=D_{\mathrm H}^2$ entries ($85$~MB for $m=200$ at $D_{\mathrm H}=163$). No value wins on the problems measured, so the default is kept. Unpreconditioned solves of the thermal spin chain of Example~2 (\texttt{preconditioner=None}) took, per solve, with $m=20, 50, 100, 200$:
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+ & $m=20$ & $m=50$ & $m=100$ & $m=200$\\
+\midrule
+$D_{\mathrm H}=57$, $\eta=0.03$~meV: iterations (time) & 673 (0.12~s) & 321 (0.09~s) & 134 (0.06~s) & 102 (0.06~s)\\
+$D_{\mathrm H}=57$, $\eta=0.003$~meV & 5688 (0.99~s) & 3539 (0.98~s) & 1895 (0.87~s) & 128 (0.08~s)\\
+$D_{\mathrm H}=163$, $\eta=0.03$~meV & 1210 (1.4~s) & 1081 (1.7~s) & 939 (2.6~s) & 798 (4.1~s)\\
+\bottomrule
+\end{tabular}
+\end{center}
+so that a long restart is worth ten at the smallest $\eta$ and costs a factor three at the largest dimension. The solves of Examples~1 and~3 and of the dissipative three-site chain take two or three iterations whatever the restart. With the preconditioner, which is the default whenever it is exact, the restart is immaterial for the models of the article.
 
 \begin{verbatim}
 solver = SpectroscopySolver(

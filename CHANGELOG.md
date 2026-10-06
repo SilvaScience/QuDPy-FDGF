@@ -9,6 +9,14 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 - `eta` has no default: `SpectroscopySolver(...)`, `DenseLiouvilleBackend` and `SparseSectorBackend`
   raise a `ValueError` that explains the parameter when it is missing (the former `0.05` has no
   meaning without a unit). Negative, infinite and NaN values are rejected.
+- `SparseSectorBackend`: the default is `preconditioner="auto"` instead of `None`. The diagonal
+  preconditioner is applied when the generator is diagonal in the dyad basis (diagonal Hamiltonian
+  blocks of single sectors, diagonal collapse operators; closed models in their eigenbasis, pure
+  dephasing) and left off otherwise, including matrix-free blocks that cannot be inspected. The
+  numbers do not change beyond the solver tolerance; closed models take one iteration per solve
+  instead of hundreds (Example 2, D = 57: 1 082 iterations and 1.1 s become 1 iteration and 0.01 s).
+  `preconditioner=None` gives the former plain GMRES; the dense-versus-sparse benchmark scripts of Examples 2 and 3 pass it.
+  `diagnostics["solver"]["preconditioner"]` and `backend.preconditioner` report the choice.
 - `EigenbasisKModel` and `ExcitationSectorModel`: `boltzmann_constant` no longer defaults to the
   value in eV/K. New argument `energy_unit` (`"eV"`, `"meV"`, `"cm-1"`, `"THz"`; the last is the
   ordinary frequency E/h, k_B/h = 0.0208 THz/K) sets it; `boltzmann_constant` explicit is still
@@ -18,6 +26,13 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   A model that ran in eV with a thermal state must now say `energy_unit="eV"`.
 
 ### Changed
+- GMRES restart (no change): `resolvent_restart` keeps SciPy's default (20). Measured on unpreconditioned solves of
+  the thermal XXZ chain, restart 20/50/100/200 gives 673/321/134/102 iterations (0.12/0.09/0.06/0.06 s) at
+  D = 57, eta = 0.03 meV; 5688/3539/1895/128 (0.99/0.98/0.87/0.08 s) at eta = 0.003 meV; but 1210/1081/939/798
+  iterations in 1.4/1.7/2.6/4.1 s at D = 163, eta = 0.03 meV, where each iteration costs more and the basis takes
+  85 MB at restart 200. No value wins across the cases, and the preconditioner removes the question for the
+  models above, so the default is unchanged. The solves of Examples 1 and 3 and of the dissipative chain take 2 or 3
+  iterations at any restart.
 - `generate_spectrum` (and `generate_nq_spectrum`) evaluate a grid with `strategy="auto"` by
   default: when at least two axes are scanned and the factorized evaluation needs fewer solves, each
   pathway is cut between two scanned intervals, the two parts are evaluated once per point of their

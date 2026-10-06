@@ -46,7 +46,8 @@ def test_generator_diagonal_matches_the_dense_generator():
 @pytest.mark.parametrize("dissipative", (False, True))
 def test_spectra_are_unchanged(dissipative):
     reference = spectrum(three_site_chain(dissipative), "dense")
-    plain = spectrum(three_site_chain(dissipative), "sparse_sector", krylov_tolerance=1e-12)
+    plain = spectrum(three_site_chain(dissipative), "sparse_sector", krylov_tolerance=1e-12,
+                     preconditioner=None)
     preconditioned = spectrum(three_site_chain(dissipative), "sparse_sector",
                               krylov_tolerance=1e-12, preconditioner="diagonal")
     scale = np.max(np.abs(reference))
@@ -62,7 +63,7 @@ def test_closed_model_in_its_eigenbasis_needs_one_iteration():
 
 
 def test_dissipation_needs_fewer_iterations():
-    plain = run(three_site_chain(), "sparse_sector", krylov_tolerance=1e-12)
+    plain = run(three_site_chain(), "sparse_sector", krylov_tolerance=1e-12, preconditioner=None)
     preconditioned = run(three_site_chain(), "sparse_sector", krylov_tolerance=1e-12,
                          preconditioner="diagonal")
     assert iterations(preconditioned) < iterations(plain)

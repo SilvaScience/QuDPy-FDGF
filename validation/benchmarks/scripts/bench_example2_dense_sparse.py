@@ -24,7 +24,7 @@ pick = np.linspace(0, 59, 5).round().astype(int)
 AXES = {"omega_1q": EX2_AXES["omega_1q"][pick], "omega_emit": EX2_AXES["omega_emit"][pick]}
 results, times = {}, {}
 for backend, options in (("dense", {"cache_resolvents": False}),
-                         ("sparse_sector", {"krylov_tolerance": EX2["krylov_tolerance"]})):
+                         ("sparse_sector", {"krylov_tolerance": EX2["krylov_tolerance"], "preconditioner": None})):
     model, _ = example2_model()
     solver = SpectroscopySolver(backend=backend, eta=EX2["eta"], **options)
     solver.feed_model(model, context=example2_context())

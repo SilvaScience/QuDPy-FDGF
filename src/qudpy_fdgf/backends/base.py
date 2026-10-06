@@ -236,6 +236,7 @@ class BackendBase(ABC):
         samples = statistics["residual_samples"]
         result = {
             "method": self._solve_method,
+            "preconditioner": getattr(self, "preconditioner", None),
             "solves": solves,
             "relative_residual_max": (
                 statistics["relative_residual_max"] if samples else None
