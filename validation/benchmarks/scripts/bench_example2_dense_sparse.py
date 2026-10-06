@@ -5,8 +5,8 @@ t2 = 0, eta = 0.03 meV, on a 5 x 5 subgrid of the published 60 x 60 window. Runs
 
     dense_factorized, dense_pointwise    dense backend (resolvent caching off, to keep its memory within
                                          the test machine; the pointwise run is slow, 150 inversions)
-    sparse_plain_*                       sparse backend, preconditioner=None (plain GMRES)
-    sparse_*                             sparse backend, defaults (preconditioner="auto": diagonal here)
+    sparse_plain_*                       sparse backend, preconditioner=None, diagonal_solve=False (plain GMRES)
+    sparse_*                             sparse backend, defaults (this generator is diagonal: solved by division)
 
 with strategy "factorized" and "pointwise". ``python bench_example2_dense_sparse.py skip-dense-pointwise``
 leaves out the slow run.
@@ -29,7 +29,7 @@ pick = np.linspace(0, 59, 5).round().astype(int)
 AXES = {"omega_1q": EX2_AXES["omega_1q"][pick], "omega_emit": EX2_AXES["omega_emit"][pick]}
 RUNS = {
     "dense": ("dense", {"cache_resolvents": False}),
-    "sparse_plain": ("sparse_sector", {"krylov_tolerance": EX2["krylov_tolerance"], "preconditioner": None}),
+    "sparse_plain": ("sparse_sector", {"krylov_tolerance": EX2["krylov_tolerance"], "preconditioner": None, "diagonal_solve": False}),
     "sparse": ("sparse_sector", {"krylov_tolerance": EX2["krylov_tolerance"]}),
 }
 skip_dense_pointwise = "skip-dense-pointwise" in sys.argv
@@ -71,4 +71,10 @@ report["worst"] = max(max(report["relative_difference"].values()), max(report["r
 print(json.dumps(report["strategy_difference"]), f"worst dense versus sparse = {report['worst']:.2e}")
 out = DATA
 out.mkdir(parents=True, exist_ok=True)
+previous = out / "example2_dense_sparse.json"
+if skip_dense_pointwise and "dense_pointwise" not in runs and previous.exists():
+    old_runs = json.loads(previous.read_text()).get("runs", {})
+    if "dense_pointwise" in old_runs:                 # the 15-minute dense pointwise run is kept from the previous result
+        runs["dense_pointwise"] = old_runs["dense_pointwise"]
+        report["strategy_difference_note"] = "dense_pointwise kept from an earlier run"
 (out / "example2_dense_sparse.json").write_text(json.dumps(report, indent=2))

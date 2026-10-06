@@ -7,8 +7,9 @@ L = 10 sites, D = sum_{N<=4} C(L, N) = 16, 31, 57, 99, 163, 256, 386. The task i
 per L (memory is the peak working set of that process minus its working set after the imports):
 
     dense             dense backend, factorized evaluation (L <= 6: 0.17 GB per Liouville matrix at D = 57)
-    sparse_plain      sparse backend, preconditioner=None (plain GMRES), factorized (L <= 8)
-    sparse            sparse backend with the defaults (preconditioner="auto", i.e. diagonal for this
+    sparse_plain      sparse backend, preconditioner=None and diagonal_solve=False (plain GMRES), factorized (L <= 8)
+    sparse            sparse backend with the defaults (diagonal_solve=True: this generator is diagonal, so the
+                      shifted systems are solved by division; preconditioner="auto", i.e. diagonal for this
                       model in its eigenbasis), factorized evaluation
     sparse_pointwise  the same, with strategy="pointwise" (one propagation per grid point)
 
@@ -36,7 +37,7 @@ OUT = DATA
 GRID = 9
 CONFIGS = {
     "dense": {"backend": "dense", "lengths": (4, 5, 6), "options": {"cache_resolvents": False}, "strategy": "auto"},
-    "sparse_plain": {"backend": "sparse_sector", "lengths": (4, 5, 6, 7, 8), "options": {"preconditioner": None},
+    "sparse_plain": {"backend": "sparse_sector", "lengths": (4, 5, 6, 7, 8), "options": {"preconditioner": None, "diagonal_solve": False},
                      "strategy": "auto"},
     "sparse": {"backend": "sparse_sector", "lengths": (4, 5, 6, 7, 8, 9, 10), "options": {}, "strategy": "auto"},
     "sparse_pointwise": {"backend": "sparse_sector", "lengths": (4, 5, 6, 7, 8, 9, 10), "options": {},

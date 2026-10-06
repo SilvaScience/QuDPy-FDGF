@@ -40,7 +40,7 @@ def problems():
                EX1_PROTOCOL, subgrid(EX1_AXES, n), pathways=EX1_PATHWAYS, fixed_coordinates={"t2": EX1["t2"]},
                strategy=strategy, warn_null=False), {"pointwise": 81, "factorized": 81})
     for label, options, limits in (("sparse", {}, {"pointwise": 33, "factorized": 65}),
-                                   ("sparse_plain", {"preconditioner": None}, {"pointwise": 5, "factorized": 33})):
+                                   ("sparse_plain", {"preconditioner": None, "diagonal_solve": False}, {"pointwise": 5, "factorized": 33})):
         yield ("example2", label, [3, 5, 9, 17, 33, 65],
                lambda options=options: (SpectroscopySolver(backend="sparse_sector", eta=EX2["eta"],
                                                            krylov_tolerance=EX2["krylov_tolerance"], **options),

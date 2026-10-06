@@ -16,7 +16,9 @@ beyond the Nyquist step of the carrier (pi / 2.5 eV): the signal lies in a band 
 folds the band onto itself without overlap (bandpass sampling), and the error measured includes any aliasing. Problems: the open two-level
 system of Example 1 at three line widths (R1 + R2, t2 = 10 eV^-1, window of 1 eV per axis, eta = 2 meV), and the
 fifth-order 2Q response of Example 3 (D = 10, seven pathways, 151 x 151 grid, eta = 8 and 2 meV).
-Results: results/data/resolved_map.json.   Usage: python bench_resolved_map.py [example1 | example3]
+Results: results/data/resolved_map.json.   Usage: python bench_resolved_map.py [example1 | example3 | refresh-sparse]
+``refresh-sparse`` measures again only the direct evaluation with the sparse backend (its solver changed: a diagonal
+generator is now solved by division) and updates those entries of the stored result.
 """
 import os
 for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
@@ -194,14 +196,19 @@ def search(solver, eta, model, protocol, scanned, fixed, pathways, windows, spac
     return best, rows
 
 
-def report_routes(name, eta, model, protocol, scanned, fixed, pathways, windows, spacing, width, dts, factors):
+def report_routes(name, eta, model, protocol, scanned, fixed, pathways, windows, spacing, width, dts, factors,
+                  only_sparse=False):
     grid1 = np.linspace(*windows[0], int(round((windows[0][1] - windows[0][0]) / spacing)) + 1)
     grid2 = np.linspace(*windows[1], int(round((windows[1][1] - windows[1][0]) / spacing)) + 1)
     axes = {scanned[0]: grid1, scanned[1]: grid2}
     dense_map, t_dense, solves, solver = direct("dense", eta, model, protocol, axes, pathways, fixed)
     sparse_map, t_sparse, solves_sparse, _ = direct("sparse_sector", eta, model, protocol, axes, pathways, fixed)
-    states_map, t_states = sum_over_states(solver, eta, protocol, scanned, fixed, pathways, grid1, grid2)
     scale = np.max(np.abs(dense_map))
+    if only_sparse:
+        print(f"{name}: direct sparse {t_sparse * 1e3:.1f} ms ({solves_sparse} solves)", flush=True)
+        return {"direct_sparse": {"time_s": t_sparse, "resolvent_solves": solves_sparse,
+                                  "difference_to_dense": float(np.max(np.abs(sparse_map - dense_map)) / scale)}}
+    states_map, t_states = sum_over_states(solver, eta, protocol, scanned, fixed, pathways, grid1, grid2)
     entry = {"eta": eta, "width": width, "N_omega": [grid1.size, grid2.size], "spacing": spacing,
              "direct_dense": {"time_s": t_dense, "resolvent_solves": solves},
              "direct_sparse": {"time_s": t_sparse, "resolvent_solves": solves_sparse,
@@ -221,7 +228,7 @@ def report_routes(name, eta, model, protocol, scanned, fixed, pathways, windows,
 
 
 # ----------------------------------------------------------------------------------------- problems
-def example1():
+def example1(only_sparse=False):
     H = np.diag([0.0, 2.0]).astype(complex)
     MU = 0.5 * np.array([[0, 1], [1, 0]], dtype=complex)
     L_RAD = np.array([[0, 1], [0, 0]], dtype=complex)
@@ -238,12 +245,13 @@ def example1():
         width = gamma_1 / 2 + gamma_phi + eta
         spacing = 2 * np.sqrt(3) * width / 4
         report[name] = report_routes(name, eta, model, protocol, ("w1", "w3"), fixed, pathways,
-                                     ((-2.5, -1.5), (1.5, 2.5)), spacing, width, (3.2, 1.6, 0.8, 0.4, 0.2), (1.0, 1.5, 2.0))
+                                     ((-2.5, -1.5), (1.5, 2.5)), spacing, width, (3.2, 1.6, 0.8, 0.4, 0.2), (1.0, 1.5, 2.0),
+                                     only_sparse=only_sparse)
         report[name].update({"gamma_1": gamma_1, "gamma_phi": gamma_phi})
     return report
 
 
-def example3():
+def example3(only_sparse=False):
     from models import EX3_AXES, EX3_FIXED, EX3_PROTOCOL, example3_model, example3_pathways
     pathways = example3_pathways()
     report = {}
@@ -252,7 +260,7 @@ def example3():
         windows = ((EX3_AXES["omega_2q"][0], EX3_AXES["omega_2q"][-1]), (EX3_AXES["omega_emit"][0], EX3_AXES["omega_emit"][-1]))
         report[f"{1000 * eta:.0f}meV"] = report_routes(f"example3 eta = {1000 * eta:.0f} meV", eta, example3_model(), EX3_PROTOCOL,
                                                       ("omega_2q", "omega_emit"), EX3_FIXED, pathways, windows, spacing,
-                                                      eta, (1.6, 0.8, 0.4), (1.0, 1.5))
+                                                      eta, (1.6, 0.8, 0.4), (1.0, 1.5), only_sparse=only_sparse)
     return report
 
 
@@ -260,6 +268,12 @@ if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"
     DATA.mkdir(parents=True, exist_ok=True)
     report = json.loads(OUT.read_text()) if OUT.exists() else {}
+    if which == "refresh-sparse":
+        for key, function in (("example1", example1), ("example3", example3)):
+            fresh = function(only_sparse=True)
+            for name, entry in fresh.items():
+                report[key][name]["direct_sparse"] = entry["direct_sparse"]
+        OUT.write_text(json.dumps(report, indent=2))
     if which in ("all", "example1"):
         report["example1"] = example1()
         OUT.write_text(json.dumps(report, indent=2))

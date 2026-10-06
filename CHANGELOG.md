@@ -83,6 +83,12 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 - `generators.operator_matmat` and `operator_rmatmat` apply an operator to a matrix.
 
 ### Benchmarks
+- Rerun after the exact diagonal solve (Example 2, closed model in its eigenbasis, so default solves are divisions); the
+  benchmarks of plain GMRES and of the preconditioner pass `diagonal_solve=False`. At D = 57, 9 x 9 grid: 0.0098 s
+  (3.99 s with plain GMRES, 29.3 s dense); at D = 386: 1.6 s and 238 MB (2.8 s before), point by point 6.9 s and 33 MB, so
+  the factorized strategy now gains a factor 4 in time and costs seven times the memory. Grid 33 x 33 at D = 57: 0.019 s
+  (0.057 s before). Sparse versus dense agreement 3e-16 (Example 2) and 2e-15 (Example 3). `bench_gmres_eta.py exact`
+  and `bench_resolved_map.py refresh-sparse` are new.
 - All benchmarks of `validation/benchmarks` are recomputed with the factorized evaluation, the vectorized action of
   the generator and the `auto` preconditioner, and the notebooks `example{1,2,3}_benchmark.ipynb` and
   `validation/analysis/example2_analysis.ipynb` read the new results. `bench_scaling.py` measures four

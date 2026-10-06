@@ -1,0 +1,92 @@
+[
+  {
+    "eta_meV": 0.3,
+    "D": 57,
+    "grid": [
+      3,
+      3
+    ],
+    "mode": "exact",
+    "method": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 1.7810505780933314e-15,
+    "solves": 6,
+    "mean_iterations": null,
+    "max_iterations": null,
+    "relative_residual_max": null,
+    "condition_estimate": 23.03434697329977,
+    "time_s": 0.008106799999950454
+  },
+  {
+    "eta_meV": 0.1,
+    "D": 57,
+    "grid": [
+      3,
+      3
+    ],
+    "mode": "exact",
+    "method": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 1.9458903017702986e-15,
+    "solves": 6,
+    "mean_iterations": null,
+    "max_iterations": null,
+    "relative_residual_max": null,
+    "condition_estimate": 67.1030409198993,
+    "time_s": 0.006735800008755177
+  },
+  {
+    "eta_meV": 0.03,
+    "D": 57,
+    "grid": [
+      3,
+      3
+    ],
+    "mode": "exact",
+    "method": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 2.6110304455015432e-15,
+    "solves": 6,
+    "mean_iterations": null,
+    "max_iterations": null,
+    "relative_residual_max": null,
+    "condition_estimate": 221.3434697329977,
+    "time_s": 0.0066288999951211736
+  },
+  {
+    "eta_meV": 0.01,
+    "D": 57,
+    "grid": [
+      3,
+      3
+    ],
+    "mode": "exact",
+    "method": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 3.429070680449165e-15,
+    "solves": 6,
+    "mean_iterations": null,
+    "max_iterations": null,
+    "relative_residual_max": null,
+    "condition_estimate": 662.0304091989931,
+    "time_s": 0.00655830001051072
+  },
+  {
+    "eta_meV": 0.003,
+    "D": 57,
+    "grid": [
+      3,
+      3
+    ],
+    "mode": "exact",
+    "method": "diagonal",
+    "converged": true,
+    "relative_difference_to_dense": 3.4948139963937785e-15,
+    "solves": 6,
+    "mean_iterations": null,
+    "max_iterations": null,
+    "relative_residual_max": null,
+    "condition_estimate": 2204.4346973299766,
+    "time_s": 0.00666730001103133
+  }
+]

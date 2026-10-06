@@ -8,7 +8,9 @@ solves of the factorized evaluation, forward and adjoint). The dense backend at 
 is the reference; its spectra are saved and reused by later runs.
 
 Usage:  python bench_gmres_eta.py            (plain GMRES, preconditioner=None, writes results/data/gmres_eta.json)
-        python bench_gmres_eta.py diagonal   (diagonal preconditioner, results/data/gmres_eta_diagonal.json)
+        python bench_gmres_eta.py diagonal   (GMRES with the diagonal preconditioner, results/data/gmres_eta_diagonal.json)
+        python bench_gmres_eta.py exact      (defaults: this generator is diagonal, so the shifted systems are solved
+                                              by division, results/data/gmres_eta_exact.json)
 """
 import os
 for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
@@ -26,8 +28,11 @@ from qudpy_fdgf.exceptions import ConvergenceError
 from models import EX2, EX2_PATHWAYS, EX2_PROTOCOL, example2_context, example2_model
 
 ETAS = (0.3, 0.1, 0.03, 0.01, 0.003)
-PRECONDITIONER = sys.argv[1] if len(sys.argv) > 1 else None
-RESULT = "gmres_eta.json" if PRECONDITIONER is None else f"gmres_eta_{PRECONDITIONER}.json"
+MODE = sys.argv[1] if len(sys.argv) > 1 else "plain"
+OPTIONS = {"plain": {"preconditioner": None, "diagonal_solve": False},
+           "diagonal": {"preconditioner": "diagonal", "diagonal_solve": False},
+           "exact": {}}[MODE]
+RESULT = "gmres_eta.json" if MODE == "plain" else f"gmres_eta_{MODE}.json"
 OUT = DATA
 OUT.mkdir(parents=True, exist_ok=True)
 GRID = 3          # the iterations per solve do not depend on the grid; 3 x 3 keeps the dense references cheap
@@ -47,18 +52,20 @@ for eta in ETAS:
         del dense
         np.save(reference_file, ref)
     sparse = SpectroscopySolver(backend="sparse_sector", eta=eta, krylov_tolerance=EX2["krylov_tolerance"],
-                                preconditioner=PRECONDITIONER)
+                                **OPTIONS)
     sparse.feed_model(model, context=example2_context())
     start = time.perf_counter()
-    row = {"eta_meV": eta, "D": 57, "grid": [GRID, GRID], "preconditioner": PRECONDITIONER}
+    row = {"eta_meV": eta, "D": 57, "grid": [GRID, GRID], "mode": MODE,
+           "method": None}
     try:
         result = sparse.generate_spectrum(EX2_PROTOCOL, AXES, pathways=EX2_PATHWAYS,
                                           fixed_coordinates={"t2": EX2["t2"]})
         statistics = result.diagnostics["solver"]
         row.update({"converged": True,
                     "relative_difference_to_dense": float(np.max(abs(result.components["rephasing"] - ref)) / np.max(abs(ref))),
-                    "solves": statistics["solves"], "mean_iterations": statistics["iterations_mean"],
-                    "max_iterations": statistics["iterations_max"],
+                    "method": statistics["method"],
+                    "solves": statistics["solves"], "mean_iterations": statistics.get("iterations_mean"),
+                    "max_iterations": statistics.get("iterations_max"),
                     "relative_residual_max": statistics["relative_residual_max"],
                     "condition_estimate": statistics["condition_estimate"]})
     except ConvergenceError as exc:
