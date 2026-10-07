@@ -139,6 +139,12 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   to 2e-3. `validation/analysis/example2_pulses.py` computes the 60 x 60 map of the thermal XXZ chain for pulse durations
   from 0.02 to 3 meV^-1 (resumable; one file per map in `validation/results/cache/`), for the error of the impulsive limit and
   of the rotating-wave approximation at THz frequencies. `tests/physics/test_finite_pulses.py` (2 tests, 250 in all).
+  Result (`analysis/example2_pulses.ipynb`, carrier on the bright magnon): the impulsive limit costs about 4 % per meV^-1 of
+  pulse standard deviation (1e-3 at 0.02, 1 % near 0.25, 12 % at 3) and agrees with QuDPy-FDGF to 1e-3 on the published map
+  for the shortest pulses; the RWA costs 9 % for very short pulses and less than 1 % from 0.7 meV^-1 on; the real field
+  against QuDPy-FDGF has a minimum of 2.9 % at 0.7 meV^-1 (pulse FWHM 1.1 ps): no duration brings both approximations
+  below a few per cent when the carrier sits on the magnon. Not done: a scan of the carrier (real THz sources are
+  broader and centred higher).
 - `validation/benchmarks/scripts/bench_qudpy_perspective.py` and `..._series.py`: original QuDPy (public `coherence2d`,
   four interactions for the action diagrams) against QuDPy-FDGF on the coupled modes of Example 4, at the grid of the
   Perspective and at a resolved grid; resumable (cases already in `results/data/qudpy_perspective.json` are skipped, the
