@@ -96,20 +96,20 @@ N_fl / S_pop = 0.993262; 1 - exp(-5) = 0.993262
 
 The second line is a rounding error, of the order of 1e-16 and platform dependent. The cell saves its results in `validation/results/data/example1.npz`.
 
-**3. Test suite** (about 15 s).
+**3. Test suite** (about 30 s).
 
 ```bash
 python -m pytest
 ```
 
-Expected: `250 passed` in about 35 s (a local `tests/consistency/` folder, if present, adds 4 tests).
+Expected: `250 passed` in about 30 s (a local `tests/consistency/` folder, if present, adds 4 tests).
 
 ## Examples, tests, and validation
 
 - `examples/quickstart.py`: open two-level system, linear and third-order rephasing responses,
   with analytical checks (about 2 s). It is the Quick start of the API documentation.
 - `examples/example{1,2,3,4}_*.ipynb`: the examples, as notebooks (see `examples/README.md`).
-- `python -m pytest`: runs `tests/` in about 15 s (`-m "not slow"` skips the slowest). `tests/api/`
+- `python -m pytest`: runs `tests/` in about 30 s (`-m "not slow"` skips the slowest). `tests/api/`
   checks the contracts and options of the library, `tests/physics/` checks closed-form results and
   limiting cases of the manuscript (Example 1 formulas, exact jump integral, decay rates, harmonic
   cancellation at fifth order, the excitation-number action identity of Example 4). `tests/regression/` compares eight small calculations (two-level
