@@ -15,8 +15,10 @@ For each accuracy target the cheapest (dt, T, transform) that reaches it is sear
 beyond the Nyquist step of the carrier (pi / 2.5 eV): the signal lies in a band of 1 eV, so sampling at the bandwidth
 folds the band onto itself without overlap (bandpass sampling), and the error measured includes any aliasing. Problems: the open two-level
 system of Example 1 at three line widths (R1 + R2, t2 = 10 eV^-1, window of 1 eV per axis, eta = 2 meV), and the
-fifth-order 2Q response of Example 3 (D = 10, seven pathways, 151 x 151 grid, eta = 8 and 2 meV).
-Results: results/data/resolved_map.json.   Usage: python bench_resolved_map.py [example1 | example3 | refresh-sparse]
+fifth-order 2Q response of Example 3 (D = 10, seven pathways, 151 x 151 grid, eta = 8 and 2 meV). ``modes`` and ``chi5`` are the
+problems of the article: the two coupled dissipative modes of Example 2 (third order, 0.4 eV per axis, rates of the example and
+divided by ten) and its closed limit at fifth order (eta = 2 and 1 meV).
+Results: results/data/resolved_map.json.   Usage: python bench_resolved_map.py [example1 | example3 | modes | chi5 | refresh-sparse]
 ``refresh-sparse`` measures again only the direct evaluation with the sparse backend (its solver changed: a diagonal
 generator is now solved by division) and updates those entries of the stored result.
 """
@@ -264,6 +266,41 @@ def example3(only_sparse=False):
     return report
 
 
+def modes(only_sparse=False):
+    """Example 2 (two coupled dissipative modes): third order, R_GSB + R_SE + R_ESA, polarization, 0.4 eV per axis.
+
+    The rates are those of Example 2 and, in the second case, divided by ten (narrowest coherence 5.6 and 0.56 meV).
+    """
+    from models import EX4, EX4_AXES, EX4_PATHWAYS, EX4_PROTOCOL, example4_model
+    eta, fixed = EX4["eta"], {"t2": EX4["t2"]}
+    windows = ((float(EX4_AXES["omega_1q"][0]), float(EX4_AXES["omega_1q"][-1])),
+               (float(EX4_AXES["omega_emit"][0]), float(EX4_AXES["omega_emit"][-1])))
+    report = {}
+    for name, factor in {"baseline": 1.0, "rates_divided_by_ten": 0.1}.items():
+        changes = {key: EX4[key] * factor for key in ("gamma_phi", "k_relax", "k_transfer", "k_rad")}
+        width = (changes["gamma_phi"] + changes["k_relax"] + changes["k_rad"]) / 2 + eta        # the narrowest coherence
+        spacing = 2 * np.sqrt(3) * width / 4
+        report[name] = report_routes(f"modes {name}", eta, example4_model(**changes), EX4_PROTOCOL, ("omega_1q", "omega_emit"),
+                                     fixed, EX4_PATHWAYS, windows, spacing, width, (6.4, 3.2, 1.6, 0.8, 0.4), (1.0, 1.5, 2.0),
+                                     only_sparse=only_sparse)
+        report[name]["rate_factor"] = factor
+    return report
+
+
+def chi5(only_sparse=False):
+    """Closed limit of Example 2: fifth-order 2Q response, D = 10, seven pathways, eta = 2 and 1 meV, spacing eta."""
+    from models import EX4_CHI5_AXES, EX4_CHI5_FIXED, EX4_CHI5_PROTOCOL, example4_chi5_model, example4_chi5_pathways
+    pathways = example4_chi5_pathways()
+    windows = ((float(EX4_CHI5_AXES["omega_2q"][0]), float(EX4_CHI5_AXES["omega_2q"][-1])),
+               (float(EX4_CHI5_AXES["omega_emit"][0]), float(EX4_CHI5_AXES["omega_emit"][-1])))
+    report = {}
+    for eta in (0.002, 0.001):
+        report[f"{1000 * eta:.0f}meV"] = report_routes(f"chi5 eta = {1000 * eta:.0f} meV", eta, example4_chi5_model(), EX4_CHI5_PROTOCOL,
+                                                      ("omega_2q", "omega_emit"), EX4_CHI5_FIXED, pathways, windows, eta,
+                                                      eta, (1.6, 0.8, 0.4), (1.0, 1.5), only_sparse=only_sparse)
+    return report
+
+
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"
     DATA.mkdir(parents=True, exist_ok=True)
@@ -279,5 +316,11 @@ if __name__ == "__main__":
         OUT.write_text(json.dumps(report, indent=2))
     if which in ("all", "example3"):
         report["example3"] = example3()
+        OUT.write_text(json.dumps(report, indent=2))
+    if which in ("all", "modes"):
+        report["modes"] = modes()
+        OUT.write_text(json.dumps(report, indent=2))
+    if which in ("all", "chi5"):
+        report["chi5"] = chi5()
         OUT.write_text(json.dumps(report, indent=2))
     print("done", flush=True)

@@ -1,351 +1,421 @@
 {
   "rows": [
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 5,
-      "time_s": 0.06744050000270363,
+      "time_s": 0.08480660000350326,
       "resolvent_solves": 150,
       "propagations": 10,
       "stored_vectors": null
     },
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 11,
-      "time_s": 0.2347202999953879,
+      "time_s": 0.3317027000011876,
       "resolvent_solves": 726,
       "propagations": 22,
       "stored_vectors": null
     },
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 21,
-      "time_s": 0.793932999993558,
+      "time_s": 1.0112373000010848,
       "resolvent_solves": 2646,
       "propagations": 42,
       "stored_vectors": null
     },
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 41,
-      "time_s": 2.7322857000108343,
+      "time_s": 3.5618566000193823,
       "resolvent_solves": 10086,
       "propagations": 82,
       "stored_vectors": null
     },
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 81,
-      "time_s": 10.320651100002578,
+      "time_s": 11.923663200024748,
       "resolvent_solves": 39366,
       "propagations": 162,
       "stored_vectors": null
     },
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 5,
-      "time_s": 0.059651100003975444,
+      "time_s": 0.06110990000888705,
       "resolvent_solves": 10,
       "propagations": 10,
       "stored_vectors": 5
     },
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 11,
-      "time_s": 0.07653269999718759,
+      "time_s": 0.07949499998358078,
       "resolvent_solves": 22,
       "propagations": 22,
       "stored_vectors": 11
     },
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 21,
-      "time_s": 0.10020349999831524,
+      "time_s": 0.13857650000136346,
       "resolvent_solves": 42,
       "propagations": 42,
       "stored_vectors": 21
     },
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 41,
-      "time_s": 0.14971860000514425,
+      "time_s": 0.22332900000037625,
       "resolvent_solves": 82,
       "propagations": 82,
       "stored_vectors": 41
     },
     {
-      "example": "example1",
+      "example": "quickstart",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 81,
-      "time_s": 0.25411480000184383,
+      "time_s": 0.28280650000669993,
       "resolvent_solves": 162,
       "propagations": 162,
       "stored_vectors": 81
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 3,
-      "time_s": 0.009894100003293715,
+      "time_s": 0.01109859999269247,
       "resolvent_solves": 54,
       "propagations": 0,
       "stored_vectors": null
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 5,
-      "time_s": 0.011379199990187772,
+      "time_s": 0.01272259998950176,
       "resolvent_solves": 150,
       "propagations": 0,
       "stored_vectors": null
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 9,
-      "time_s": 0.037103599999682046,
+      "time_s": 0.037818499986315146,
       "resolvent_solves": 486,
       "propagations": 0,
       "stored_vectors": null
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 17,
-      "time_s": 0.1346477000042796,
+      "time_s": 0.13566269999137148,
       "resolvent_solves": 1734,
       "propagations": 0,
       "stored_vectors": null
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 33,
-      "time_s": 0.50903030000336,
+      "time_s": 0.5106784999952652,
       "resolvent_solves": 6534,
       "propagations": 0,
       "stored_vectors": null
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 3,
-      "time_s": 0.0010670000046957284,
+      "time_s": 0.0012119000020902604,
       "resolvent_solves": 6,
       "propagations": 0,
       "stored_vectors": 3
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 5,
-      "time_s": 0.0014069000026211143,
+      "time_s": 0.0014513999922201037,
       "resolvent_solves": 10,
       "propagations": 0,
       "stored_vectors": 5
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 9,
-      "time_s": 0.0029797000024700537,
+      "time_s": 0.003981299989391118,
       "resolvent_solves": 18,
       "propagations": 0,
       "stored_vectors": 9
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 17,
-      "time_s": 0.00740360000054352,
+      "time_s": 0.009220499981893227,
       "resolvent_solves": 34,
       "propagations": 0,
       "stored_vectors": 17
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 33,
-      "time_s": 0.019447400001809,
+      "time_s": 0.023399400000926107,
       "resolvent_solves": 66,
       "propagations": 0,
       "stored_vectors": 33
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 65,
-      "time_s": 0.042871500001638196,
+      "time_s": 0.052871599997160956,
       "resolvent_solves": 130,
       "propagations": 0,
       "stored_vectors": 65
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse_plain",
       "strategy": "pointwise",
       "N": 3,
-      "time_s": 5.785623800009489,
+      "time_s": 6.219463999994332,
       "resolvent_solves": 54,
       "propagations": 0,
       "stored_vectors": null
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse_plain",
       "strategy": "pointwise",
       "N": 5,
-      "time_s": 17.843703099992126,
+      "time_s": 21.03220099999453,
       "resolvent_solves": 150,
       "propagations": 0,
       "stored_vectors": null
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse_plain",
       "strategy": "factorized",
       "N": 3,
-      "time_s": 1.2083810000040103,
+      "time_s": 1.6474911000113934,
       "resolvent_solves": 6,
       "propagations": 0,
       "stored_vectors": 3
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse_plain",
       "strategy": "factorized",
       "N": 5,
-      "time_s": 2.105788000000757,
+      "time_s": 2.5971941000025254,
       "resolvent_solves": 10,
       "propagations": 0,
       "stored_vectors": 5
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse_plain",
       "strategy": "factorized",
       "N": 9,
-      "time_s": 3.924779299995862,
+      "time_s": 4.601170700014336,
       "resolvent_solves": 18,
       "propagations": 0,
       "stored_vectors": 9
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse_plain",
       "strategy": "factorized",
       "N": 17,
-      "time_s": 7.287445200010552,
+      "time_s": 8.661001600004965,
       "resolvent_solves": 34,
       "propagations": 0,
       "stored_vectors": 17
     },
     {
-      "example": "example2",
+      "example": "example1",
       "backend": "sparse_plain",
       "strategy": "factorized",
       "N": 33,
-      "time_s": 13.993217499999446,
+      "time_s": 16.809161299985135,
       "resolvent_solves": 66,
       "propagations": 0,
       "stored_vectors": 33
     },
     {
-      "example": "example3",
+      "example": "example2",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 11,
-      "time_s": 0.10438580000482034,
+      "time_s": 1.0822399999888148,
+      "resolvent_solves": 726,
+      "propagations": 22,
+      "stored_vectors": null
+    },
+    {
+      "example": "example2",
+      "backend": "sparse",
+      "strategy": "pointwise",
+      "N": 31,
+      "time_s": 7.409199100016849,
+      "resolvent_solves": 5766,
+      "propagations": 62,
+      "stored_vectors": null
+    },
+    {
+      "example": "example2",
+      "backend": "sparse",
+      "strategy": "pointwise",
+      "N": 61,
+      "time_s": 26.610857799998485,
+      "resolvent_solves": 22326,
+      "propagations": 122,
+      "stored_vectors": null
+    },
+    {
+      "example": "example2",
+      "backend": "sparse",
+      "strategy": "factorized",
+      "N": 11,
+      "time_s": 0.38912490001530387,
+      "resolvent_solves": 22,
+      "propagations": 22,
+      "stored_vectors": 11
+    },
+    {
+      "example": "example2",
+      "backend": "sparse",
+      "strategy": "factorized",
+      "N": 31,
+      "time_s": 0.9744249999930616,
+      "resolvent_solves": 62,
+      "propagations": 62,
+      "stored_vectors": 31
+    },
+    {
+      "example": "example2",
+      "backend": "sparse",
+      "strategy": "factorized",
+      "N": 61,
+      "time_s": 2.0128517000121064,
+      "resolvent_solves": 122,
+      "propagations": 122,
+      "stored_vectors": 61
+    },
+    {
+      "example": "example2",
+      "backend": "sparse",
+      "strategy": "factorized",
+      "N": 151,
+      "time_s": 4.202140100009274,
+      "resolvent_solves": 302,
+      "propagations": 302,
+      "stored_vectors": 151
+    },
+    {
+      "example": "example2_closed",
+      "backend": "sparse",
+      "strategy": "pointwise",
+      "N": 11,
+      "time_s": 0.17179419999592938,
       "resolvent_solves": 1694,
       "propagations": 67,
       "stored_vectors": null
     },
     {
-      "example": "example3",
+      "example": "example2_closed",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 31,
-      "time_s": 0.5501787000102922,
+      "time_s": 0.7135651999851689,
       "resolvent_solves": 13454,
       "propagations": 187,
       "stored_vectors": null
     },
     {
-      "example": "example3",
+      "example": "example2_closed",
       "backend": "sparse",
       "strategy": "pointwise",
       "N": 61,
-      "time_s": 1.70238979998976,
+      "time_s": 2.6796958000049926,
       "resolvent_solves": 52094,
       "propagations": 367,
       "stored_vectors": null
     },
     {
-      "example": "example3",
+      "example": "example2_closed",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 11,
-      "time_s": 0.05589239999244455,
+      "time_s": 0.08236369999940507,
       "resolvent_solves": 22,
       "propagations": 67,
       "stored_vectors": 11
     },
     {
-      "example": "example3",
+      "example": "example2_closed",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 31,
-      "time_s": 0.07872029999271035,
+      "time_s": 0.11525149998487905,
       "resolvent_solves": 62,
       "propagations": 187,
       "stored_vectors": 31
     },
     {
-      "example": "example3",
+      "example": "example2_closed",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 61,
-      "time_s": 0.11367980000795797,
+      "time_s": 0.13846509999711998,
       "resolvent_solves": 122,
       "propagations": 367,
       "stored_vectors": 61
     },
     {
-      "example": "example3",
+      "example": "example2_closed",
       "backend": "sparse",
       "strategy": "factorized",
       "N": 151,
-      "time_s": 0.22251789999427274,
+      "time_s": 0.2894189000071492,
       "resolvent_solves": 302,
       "propagations": 907,
       "stored_vectors": 151
@@ -353,32 +423,40 @@
   ],
   "log_log_slopes_for_N_at_least_9": {
     "example1/sparse/pointwise": {
-      "time": 1.8903716571066198,
-      "solves": 1.9999999999999984
-    },
-    "example1/sparse/factorized": {
-      "time": 0.6019033271648268,
-      "solves": 0.9999999999999989
-    },
-    "example2/sparse/pointwise": {
-      "time": 2.015492044449794,
+      "time": 2.003332826334378,
       "solves": 2.0000000000000013
     },
-    "example2/sparse/factorized": {
-      "time": 1.3586051408334618,
+    "example1/sparse/factorized": {
+      "time": 1.317387969205487,
       "solves": 1.0000000000000004
     },
-    "example2/sparse_plain/factorized": {
-      "time": 0.978470967216956,
+    "example1/sparse_plain/factorized": {
+      "time": 0.9971936309057726,
       "solves": 1.0
     },
-    "example3/sparse/pointwise": {
-      "time": 1.6276076498157126,
+    "example2/sparse/pointwise": {
+      "time": 1.8683634768388364,
+      "solves": 1.9999999999999998
+    },
+    "example2/sparse/factorized": {
+      "time": 0.9191814390059475,
+      "solves": 0.9999999999999993
+    },
+    "example2_closed/sparse/pointwise": {
+      "time": 1.584619857045331,
       "solves": 2.0000000000000004
     },
-    "example3/sparse/factorized": {
-      "time": 0.5248929234088114,
+    "example2_closed/sparse/factorized": {
+      "time": 0.4626310282860523,
       "solves": 0.9999999999999993
+    },
+    "quickstart/sparse/pointwise": {
+      "time": 1.8031009649642857,
+      "solves": 1.9999999999999984
+    },
+    "quickstart/sparse/factorized": {
+      "time": 0.6421501328634153,
+      "solves": 0.9999999999999989
     }
   }
 }
