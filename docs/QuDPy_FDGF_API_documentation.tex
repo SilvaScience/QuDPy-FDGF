@@ -43,7 +43,7 @@ pip install -e .              # core: NumPy, SciPy, Matplotlib
 pip install -e ".[examples]"  # optional: QuTiP, UFSS, IPython (notebooks)
 pip install -e ".[dev]"       # optional: pytest
 \end{verbatim}
-The core dependencies are NumPy~$\geq 1.24$, SciPy~$\geq 1.10$, and Matplotlib~$\geq 3.7$; Matplotlib is used only by \texttt{SpectroscopyPlotter}. QuTiP is used by the example notebooks to build operators, and \texttt{ufss.DiagramGenerator} generates the fifth-order pathways of the chromophore example. The optional extra \texttt{[manybody]} installs TeNPy for the experimental modules, which are not part of this release. The reference output below was obtained with Python~3.13.14, NumPy~2.5.0, SciPy~1.18.0, and Matplotlib~3.11.0.
+The core dependencies are NumPy~$\geq 1.24$, SciPy~$\geq 1.10$, and Matplotlib~$\geq 3.7$; Matplotlib is used only by \texttt{SpectroscopyPlotter}. QuTiP is used by the example notebooks to build operators, and \texttt{ufss.DiagramGenerator} generates the fifth-order pathways of the closed limit of Example~2. The optional extra \texttt{[manybody]} installs TeNPy for the experimental modules, which are not part of this release. The reference output below was obtained with Python~3.13.14, NumPy~2.5.0, SciPy~1.18.0, and Matplotlib~3.11.0.
 
 \subsection{A complete calculation}
 The script below treats an open two-level system with transition energy $2~\mathrm{eV}$, radiative decay at rate $\gamma_1$, and pure dephasing at rate $\gamma_\phi$. It performs the five steps common to every calculation: build the matrices, adapt them to the model contract, feed the model to the solver, declare the pathways and the protocol, and generate the spectrum.
@@ -123,7 +123,7 @@ Each numerical line is followed by its analytical value. The absorptive line has
 \item \texttt{examples/quickstart.py}: the listing above.
 \item \texttt{examples/quickstart\_two\_level\_model.ipynb}: the tutorial of the manuscript (Sec.~4), with populations, action detection, and integrated jump observables (Sec.~\ref{sec:observables}); the listing of the manuscript is extracted from its cells tagged \texttt{listing}.
 \item \texttt{examples/example1\_xxz\_chain\_thermal.ipynb} and \texttt{examples/example2\_coupled\_modes\_detection.ipynb}: Examples~1 and~2 of the manuscript.
-\item \texttt{python -m pytest}: runs the test suite in \texttt{tests/}, including the analytical checks of the manuscript (about 17~s with a single BLAS thread, \texttt{OMP\_NUM\_THREADS=1}); \texttt{tests/api/} checks the contracts and options of the library, \texttt{tests/physics/} the closed-form results and limiting cases, and \texttt{tests/regression/} compares eight small calculations with stored outputs, which any change of the numerical core must reproduce.
+\item \texttt{python -m pytest}: runs the test suite in \texttt{tests/}, including the analytical checks of the manuscript (about 30~s with a single BLAS thread, \texttt{OMP\_NUM\_THREADS=1}); \texttt{tests/api/} checks the contracts and options of the library, \texttt{tests/physics/} the closed-form results and limiting cases, and \texttt{tests/regression/} compares eight small calculations with stored outputs, which any change of the numerical core must reproduce.
 \item \texttt{validation/}: analysis notebooks (convergence, analytical limits, backend agreement), benchmark notebooks and scripts (time, memory, comparison with the original QuDPy), the scripts that redraw the figures of the manuscript, the shared models, and the stored results (see \texttt{validation/README.md}).
 \end{itemize}
 Section~\ref{app1} documents the model contract, the solver, and the backends; Sec.~\ref{sec:pathway-conventions} fixes the sign and ordering conventions of the pathways.
@@ -410,7 +410,7 @@ SpectroscopySolver(
     **backend_options
 )
 \end{verbatim}
-The broadening \texttt{eta} is required and has no default. It is the homogeneous linewidth of the frequency-domain resolvents $[(\eta-i\omega)\mathbb{1}-\mathcal{L}]^{-1}$ (a line of decay rate $\Gamma$ becomes a Lorentzian of half width $\Gamma+\eta$) and is expressed in the unit of the Hamiltonian, so that no number is reasonable for every model. A missing \texttt{eta}, or a negative, infinite or NaN one, raises \texttt{ValueError}, from the solver and from the backends alike. The arguments \texttt{check\_stationarity} and \texttt{stationarity\_tolerance} control the check of the reference state described below.
+The broadening \texttt{eta} is required and has no default. It is the regularization of the frequency-domain resolvents $[(\eta-i\omega)\mathbb{1}-\mathcal{L}]^{-1}$ (Sec.~2.4 of the article): it keeps the shifted systems away from the poles of $\mathcal{L}$ and, as a consequence, adds a Lorentzian half width $\eta$ to every line (a line of decay rate $\Gamma$ becomes a Lorentzian of half width $\Gamma+\eta$). It is expressed in the unit of the Hamiltonian, so that no number is reasonable for every model. A missing \texttt{eta}, or a negative, infinite or NaN one, raises \texttt{ValueError}, from the solver and from the backends alike. The arguments \texttt{check\_stationarity} and \texttt{stationarity\_tolerance} control the check of the reference state described below.
 
 When \texttt{backend="auto"} is selected, the solver compares the effective model requirements with the declared capabilities of the registered backends. Built-in and custom backends are listed by \texttt{available\_backends()} and custom implementations are added with \texttt{register\_backend(name, backend\_class)}.
 
@@ -418,7 +418,7 @@ When \texttt{backend="auto"} is selected, the solver compares the effective mode
 \subsubsection{Model registration and backend construction}
 
 
-The method \texttt{feed\_model(model, context=None, initial\_state=None)} connects a \texttt{SectorModel} to the solver. The method performs the following operations:
+The method \texttt{feed\_model(model, *, context=None, initial\_state=None)} connects a \texttt{SectorModel} to the solver. The method performs the following operations:
 \begin{enumerate}
     \item validates the structural model contract;
     \item resolves the thermodynamic context, initial state, and collapse channels;
@@ -464,7 +464,7 @@ The state depends only on the generator, not on the reference state of the model
 
 \paragraph{Uniqueness.} If the kernel of $\mathcal{L}$ has dimension above one (a closed model, conserved quantities, a level or sector without relaxation, dark states of a collective decay), there is no stationary state but a family, and what the solver returns is one element of it, without physical meaning; a \texttt{SteadyStateWarning} says so. The dense backend detects it for free: the reciprocal condition number $\rho$ of the LU gives the error estimate $\epsilon/\rho$, and the kernel is declared degenerate (\texttt{unique=False}, minimum-norm solution) above $10^{-6}$. The sparse backend does not test it by default (\texttt{unique=None}), because the test is as stiff as the generator: with \texttt{check\_unique=True} it solves a second system with a random $\hat r$, which for a degenerate kernel gives another element (GMRES returns the projection of $\hat r$ on the kernel); the solve is limited to 2000 iterations and leaves \texttt{unique=None} if it has not converged, as it does for a stiff unique generator from $D_{\mathrm H}\gtrsim30$ with a rate 1/1000 of the energy scale. For a small model, the dense backend is the tool to ask whether the stationary state is unique. For a closed model the maximally mixed state is returned with a warning (it is stationary, as is any state diagonal in the eigenbasis).
 
-\paragraph{Imposing a reference state.} \texttt{feed\_model(model, context=None, initial\_state=None)} accepts a \texttt{DensityState} or a \texttt{PureState} for \texttt{initial\_state}, or the string \texttt{"steady"}, which computes the stationary state of the generator and takes it. The state replaces the one the model would supply (its \texttt{equilibrium\_state(context)} or \texttt{initial\_condition}, which are then not called, so that a thermal context without \texttt{energy\_unit} is not an error); \texttt{context} is still given to the model for its collapse channels. A \texttt{DensityState} is validated like any reference state (Hermitian, unit trace, positive); another type raises \texttt{TypeError}. The stationarity check then runs as usual and passes, $r$ being of the order of the residual of the solve. For the two-level system of the example above, imposing the stationary state removes the 9\% of excited population: the linear response at resonance equals that of the ground state, and for channels that satisfy detailed balance (rates $\gamma_\downarrow$ and $\gamma_\uparrow=\gamma_\downarrow e^{-\hbar\omega/k_BT}$) the stationary state is the Gibbs state, which \texttt{steady\_state} reproduces to $10^{-10}$. With rates $\gamma_\downarrow$ and $\gamma_\uparrow$ that do not, the excited population is $\gamma_\uparrow/(\gamma_\uparrow+\gamma_\downarrow)$ and the linear response scales with the ground population $\gamma_\downarrow/(\gamma_\uparrow+\gamma_\downarrow)$.
+\paragraph{Imposing a reference state.} \texttt{feed\_model(model, *, context=None, initial\_state=None)} accepts a \texttt{DensityState} or a \texttt{PureState} for \texttt{initial\_state}, or the string \texttt{"steady"}, which computes the stationary state of the generator and takes it. The state replaces the one the model would supply (its \texttt{equilibrium\_state(context)} or \texttt{initial\_condition}, which are then not called, so that a thermal context without \texttt{energy\_unit} is not an error); \texttt{context} is still given to the model for its collapse channels. A \texttt{DensityState} is validated like any reference state (Hermitian, unit trace, positive); another type raises \texttt{TypeError}. The stationarity check then runs as usual and passes, $r$ being of the order of the residual of the solve. For the two-level system of the example above, imposing the stationary state removes the 9\% of excited population: the linear response at resonance equals that of the ground state, and for channels that satisfy detailed balance (rates $\gamma_\downarrow$ and $\gamma_\uparrow=\gamma_\downarrow e^{-\hbar\omega/k_BT}$) the stationary state is the Gibbs state, which \texttt{steady\_state} reproduces to $10^{-10}$. With rates $\gamma_\downarrow$ and $\gamma_\uparrow$ that do not, the excited population is $\gamma_\uparrow/(\gamma_\uparrow+\gamma_\downarrow)$ and the linear response scales with the ground population $\gamma_\downarrow/(\gamma_\uparrow+\gamma_\downarrow)$.
 
 
 
@@ -553,6 +553,7 @@ The method
 generate_spectrum(
     protocol,
     axes,
+    *,
     fixed_coordinates=None,
     pathways=None,
     observables=None,
@@ -642,6 +643,7 @@ generate_nq_spectrum(
     order,
     protocol,
     axes,
+    *,
     fixed_coordinates=None,
     pathways=None,
     observables=None,
@@ -980,7 +982,7 @@ The residual is the true one, not the preconditioned one on which GMRES stops, a
 \begin{equation}
     \kappa(S)\leq\frac{\eta+|\omega|+\|\mathcal{L}\|}{\eta}\simeq\frac{\|\mathcal{L}\|}{\eta},
 \end{equation}
-whatever the dimension. For a dissipative generator the same resolvent has trace-norm norm at most $1/\eta$, because $\exp(\mathcal{L}t)$ is a completely positive trace-preserving map and the resolvent is its Laplace transform; in the Hilbert--Schmidt norm of the solver this gives $\|S^{-1}\|\leq\sqrt{D_{\mathrm H}}/\eta$, a worst case that the examples do not approach. \texttt{"condition\_estimate"} is the right-hand side above, with $\|\mathcal{L}\|$ obtained by power iteration (\texttt{backend.generator\_norm()}, a lower estimate) and the maximum over the frequency intervals of the protocol; it is \texttt{None} when no interval is in the frequency domain. \texttt{"forward\_error\_estimate"} is its product with the largest relative residual. In the three examples of the article the error of a solve is of the order of its relative residual, far below this bound. The Hilbert-space resolvent returns \texttt{iterations} and \texttt{relative\_residual} in its diagnostics. The dense backend reports the residual of its direct solves in the factorized evaluation; the pointwise evaluation applies cached inverses and reports none.
+whatever the dimension. For a dissipative generator the same resolvent has norm at most $1/\eta$ in the trace norm, because $\exp(\mathcal{L}t)$ is a completely positive trace-preserving map and the resolvent is its Laplace transform; in the Hilbert--Schmidt norm of the solver this gives $\|S^{-1}\|\leq\sqrt{D_{\mathrm H}}/\eta$, a worst case that the examples do not approach. \texttt{"condition\_estimate"} is the right-hand side above, with $\|\mathcal{L}\|$ obtained by power iteration (\texttt{backend.generator\_norm()}, a lower estimate) and the maximum over the frequency intervals of the protocol; it is \texttt{None} when no interval is in the frequency domain. \texttt{"forward\_error\_estimate"} is its product with the largest relative residual. In the examples of the article the error of a solve is of the order of its relative residual, far below this bound. The Hilbert-space resolvent returns \texttt{iterations} and \texttt{relative\_residual} in its diagnostics. The dense backend reports the residual of its direct solves in the factorized evaluation; the pointwise evaluation applies cached inverses and reports none.
 
 Reducing the residual is a matter of \texttt{krylov\_tolerance}. Iterative refinement, which solves $S\,\delta=b-Sx$ and updates $x$, was evaluated and is not offered: each step costs as many GMRES iterations as the solve it corrects, so that reaching $5\times10^{-13}$ from $10^{-6}$ takes 36 iterations, summed over four frequencies, on the thermal four-site chain at $\eta=0.03$~meV, whereas a solve with \texttt{krylov\_tolerance=1e-12} takes 28 for an error of $9\times10^{-16}$.
 
@@ -1035,7 +1037,7 @@ $D_{\mathrm H}=163$, $\eta=0.03$~meV & 1210 (1.4~s) & 1081 (1.7~s) & 939 (2.6~s)
 \bottomrule
 \end{tabular}
 \end{center}
-so that a long restart is worth ten at the smallest $\eta$ and costs a factor three at the largest dimension. The solves of the two-level system, of Example~2, and of the dissipative three-site chain take two or three iterations whatever the restart. With the preconditioner, which is the default whenever it is exact, the restart is immaterial for the models of the article.
+so that a long restart is worth ten at the smallest $\eta$ and costs a factor three at the largest dimension. The solves of the two-level system and of the dissipative three-site chain take two or three iterations whatever the restart. Those of Example~2 ($\eta=10~\mu$eV, lines several meV wide) take 956 iterations on average without preconditioner (at most 5\,694, restart 20) and 3.4 with the default preconditioner (at most 6). With the preconditioner, which the default applies to every model of the article, the restart is immaterial.
 
 \begin{verbatim}
 solver = SpectroscopySolver(
@@ -1048,8 +1050,9 @@ solver.feed_model(model, context=thermal_context)
 \end{verbatim}
 
 For the thermal spin chain of Example~1 (\(D=57\), \(\eta=0.03\)~meV), the mean
-number of GMRES iterations per solve falls from about 640 to 1, and the time
-for a \(3\times3\) subgrid from 58~s to 0.4~s. The measurements as a function of
+number of GMRES iterations per solve falls from about 1\,100 to 1, and the time
+for a \(3\times3\) subgrid from 1.2~s to 0.011~s; with the default exact diagonal solve there
+is no iteration and the time is 0.007~s. The measurements as a function of
 \(D\) and \(\eta\) are given in Sec.~6 of the article and in
 \texttt{validation/benchmarks/example1\_benchmark.ipynb}.
 
