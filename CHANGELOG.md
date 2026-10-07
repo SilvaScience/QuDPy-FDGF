@@ -45,7 +45,7 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   together with the comparison of the original QuDPy with the open two-level system and its time-domain benchmark,
   are in `validation/old_files/` (see its README). The fifth-order response is now that of the closed limit of
   Example 2 (`validation/analysis/example2_chi5_analysis.ipynb`).
-- `README.md`: the test suite has 246 tests (249 with the local `tests/consistency/` folder) and takes about 30 s.
+- `README.md`: the test suite has 247 tests (250 with the local `tests/consistency/` folder) and takes about 30 s.
 
 ### Changed
 - Exact diagonal solve (`SparseSectorBackend(diagonal_solve=True)`, default). When the generator is exactly
