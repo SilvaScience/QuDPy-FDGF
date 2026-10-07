@@ -1,7 +1,10 @@
 # Validation
 
 Everything that checks and measures the examples of QuDPy-FDGF, apart from the
-examples themselves (`../examples/`). The folder separates two kinds of questions:
+examples themselves (`../examples/`). The former Example 3 (fifth-order response of two coupled
+anharmonic bosonic modes) is no longer an example of the article: its notebook is in
+`../examples/old_scripts/`, and its analysis and benchmark notebooks and scripts stay here. The
+folder separates two kinds of questions:
 
 - **analysis**: is the result right and converged? (convergence, analytical limits, backend agreement)
 - **benchmark**: how much does it cost? (time, memory, iterations)
