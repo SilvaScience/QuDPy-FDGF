@@ -131,6 +131,16 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   single pathway has the width of the declared rates to about 1 %. Results in `validation/results/data/example4.npz`.
   `tests/physics/test_action_number_identity.py` checks the identity (211 tests, plus 4 in the local
   `tests/consistency/`).
+- `validation/benchmarks/scripts/bench_transverse_chain.py`: XXZ ring (Example 1) with a transverse field of 0.3 meV, which
+  couples the magnon-number sectors: no sector structure, no truncation in N, the full Hilbert space (D = 2^L) is diagonalized and
+  given to `EigenbasisKModel` as one sector (the adapters accept only one Hamiltonian block per sector). Three rephasing
+  sequences on a 9 x 9 grid, ground state, 3 BLAS threads, sparse backend: L = 6 (D = 64) 0.02 s, 6 MB; L = 8 (D = 256) 0.7 s,
+  110 MB; L = 10 (D = 1 024) 21 s and 1.7 GB with the default `memory_limit_mb=1024`, 22 s and 0.64 GB with 400, 98 s and 0.26 GB
+  with 128 (486 solves, the grid is processed in slabs); L = 11 (D = 2 048): diagonalization 10 s, spectrum 676 s, 1.0 GB
+  with `memory_limit_mb=520`. Memory grows as D^2 (x16 per two sites): L = 12 needs about 2 GB of vectors at the minimum
+  (peak about 4 GB, extrapolated: about 1 h), not run. The generator is diagonal, every solve is a division. Forced plain
+  GMRES (`diagonal_solve=False`, `preconditioner=None`) on the same model: 1 570 iterations per solve at L = 5 (D = 32), 2 005 at
+  L = 6 (D = 64), 3.5 and 12.6 s instead of milliseconds. Results in `results/data/transverse_chain.json`.
 - `validation/pulses.py`: time-domain calculation of the third-order rephasing signal of a closed system driven by Gaussian
   pulses of finite duration, independent of the resolvent formalism (hierarchy of the multilinear terms of the three pulses,
   interaction picture, RK4; the free evolution after the pulses is integrated analytically; rotating-wave or real field).
