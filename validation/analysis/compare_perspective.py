@@ -51,7 +51,7 @@ AMPLITUDE_SCALE = (N_POINTS * DT_TRUE) ** 2     # |S_continuous| = AMPLITUDE_SCA
 ETA = 1e-5
 T2 = 10.0
 
-SCENARIOS = {                                   # folder of the Perspective repository -> change to EX4
+SCENARIOS = {                                   # folder of the Perspective repository -> change to EX2
     "Reference": {},
     "Enhance Transfer trans = 0.01": {"k_transfer": 0.010},
     "Trans =0.02": {"k_transfer": 0.020},
@@ -77,11 +77,11 @@ def lorentzian_halfwidth(labels, values):
 
 
 def detector_model(changes, weights=(1.0, 1.0), nu=1.0, delay=5.0):
-    """Model of Example 4 with the detector of the Perspective's script, N_exc evolved over the delay.
+    """Model of Example 2 with the detector of the Perspective's script, N_exc evolved over the delay.
 
     N_exc = w_a n_a + w_b n_b - (1 - nu) (a^+ a^+ a a + b^+ b^+ b b); nu = 1 is the plain excitation number.
     """
-    operators = models.example4_operators(**changes)
+    operators = models.example2_operators(**changes)
     H, channels = operators["H"], operators["channels"]
     a = qt.tensor(qt.destroy(3), qt.qeye(3))
     b = qt.tensor(qt.qeye(3), qt.destroy(3))
@@ -103,7 +103,7 @@ def evaluate(model, labels, observables):
     solver = SpectroscopySolver(backend="dense", eta=ETA)
     solver.feed_model(model)
     w = np.asarray(labels) * LABEL_TO_TRUE
-    return solver.generate_spectrum(models.EX4_PROTOCOL, {"omega_1q": -w, "omega_emit": w}, pathways=models.EX4_PATHWAYS,
+    return solver.generate_spectrum(models.EX2_PROTOCOL, {"omega_1q": -w, "omega_emit": w}, pathways=models.EX2_PATHWAYS,
                                     fixed_coordinates={"t2": T2}, observables=observables)
 
 
@@ -199,12 +199,12 @@ def projector_widths(root):
         for key, peak in (("re", "a"), ("re_b", "b")):
             labels = np.asarray(data["X3"][key][2])
             solver = SpectroscopySolver(backend="dense", eta=ETA)
-            solver.feed_model(models.example4_model(**changes))
+            solver.feed_model(models.example2_model(**changes))
             w = labels * LABEL_TO_TRUE
             observables = {name: ObservableSpec.action(name, fourth_interaction=("Bu", "Kd"), operator=name)
                            for name in ("A_PL", "A_PL_unbalanced", "N_exc")}
-            result = solver.generate_spectrum(models.EX4_PROTOCOL, {"omega_1q": -w, "omega_emit": w},
-                                              pathways=models.EX4_PATHWAYS, fixed_coordinates={"t2": T2},
+            result = solver.generate_spectrum(models.EX2_PROTOCOL, {"omega_1q": -w, "omega_emit": w},
+                                              pathways=models.EX2_PATHWAYS, fixed_coordinates={"t2": T2},
                                               observables=observables)
             entry[peak] = {name: widths(labels, [sum(pathway_samples(result, name, p) for p in
                                                       ("R_SE", "R_GSB", "R_ESA"))])[0] for name in observables}

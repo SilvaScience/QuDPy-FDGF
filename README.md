@@ -55,7 +55,7 @@ src/qudpy_fdgf/          the package (generic engine, no physical model)
     plotting.py          SpectroscopyPlotter
     capabilities.py, exceptions.py
     experimental/        low-rank and tensor-network prototypes (not part of the released API)
-examples/                quickstart.py and the four examples as notebooks
+examples/                quickstart.py, the two-level quickstart notebook and the two examples as notebooks
     old_scripts/         earlier versions of the examples, kept until the review is finished
 validation/              models.py, analysis/, benchmarks/, results/ (see validation/README.md)
 tests/                   api/ (contracts and options), physics/ (closed-form results and limits),
@@ -85,7 +85,7 @@ rephasing peak   : (omega1q, omega3) = (-2.000, 2.000) eV
 2 mu^4/(Gamma_2 + eta)^2 : 1225.37
 ```
 
-**2. Example 1** (about 10 s): run all cells of `examples/example1_two_level_open.ipynb`. The
+**2. Quickstart notebook** (about 10 s): run all cells of `examples/quickstart_two_level_model.ipynb`. The
 cell of Section 7 prints
 
 ```text
@@ -94,7 +94,7 @@ max|S_pop + i S_pol| / max|S_pol| = 1.3e-16
 N_fl / S_pop = 0.993262; 1 - exp(-5) = 0.993262
 ```
 
-The second line is a rounding error, of the order of 1e-16 and platform dependent. The cell saves its results in `validation/results/data/example1.npz`.
+The second line is a rounding error, of the order of 1e-16 and platform dependent. The cell saves its results in `validation/results/data/quickstart.npz`.
 
 **3. Test suite** (about 30 s).
 
@@ -102,17 +102,17 @@ The second line is a rounding error, of the order of 1e-16 and platform dependen
 python -m pytest
 ```
 
-Expected: `250 passed` in about 30 s (a local `tests/consistency/` folder, if present, adds 4 tests).
+Expected: `246 passed` in about 30 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
 - `examples/quickstart.py`: open two-level system, linear and third-order rephasing responses,
   with analytical checks (about 2 s). It is the Quick start of the API documentation.
-- `examples/example{1,2,3,4}_*.ipynb`: the examples, as notebooks (see `examples/README.md`).
+- `examples/quickstart_two_level_model.ipynb` and `examples/example{1,2}_*.ipynb`: the quickstart and the two examples, as notebooks (see `examples/README.md`).
 - `python -m pytest`: runs `tests/` in about 30 s (`-m "not slow"` skips the slowest). `tests/api/`
   checks the contracts and options of the library, `tests/physics/` checks closed-form results and
-  limiting cases of the manuscript (Example 1 formulas, exact jump integral, decay rates, harmonic
-  cancellation at fifth order, the excitation-number action identity of Example 4). `tests/regression/` compares eight small calculations (two-level
+  limiting cases of the manuscript (quickstart formulas, exact jump integral, decay rates, harmonic
+  cancellation at fifth order, the excitation-number action identity of Example 2). `tests/regression/` compares eight small calculations (two-level
   system, dissipative and thermal chains, time-domain route, fifth-order bosons) with stored outputs
   (`data/snapshots.npz`); regenerate them only on purpose with
   `python tests/regression/generate_snapshots.py`.

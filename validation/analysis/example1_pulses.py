@@ -4,12 +4,12 @@ The third-order rephasing map of the six-site XXZ chain at 4 K (N_max = 4, D = 5
 grid of the example) is computed in the time domain for Gaussian pulses of standard deviation sigma and carrier equal to
 the bright magnon energy, with the rotating-wave field (``rwa``) and with the real field (``full``), and compared with the
 impulsive, rotating-wave response of QuDPy-FDGF. The time-domain engine is validation/pulses.py. The maps are written
-to results/data/example2_pulses.npz; the notebook example2_pulses.ipynb reads them and draws the figure.
+to results/data/example1_pulses.npz; the notebook example1_pulses.ipynb reads them and draws the figure.
 
-    python example2_pulses.py [workers]
+    python example1_pulses.py [workers]
 
 The calculation takes about an hour of processor time (a few minutes of the largest pulse durations per map); the jobs
-run in parallel. Each map is kept in results/cache/example2_pulses as soon as it is done: relaunching the script after an
+run in parallel. Each map is kept in results/cache/example1_pulses as soon as it is done: relaunching the script after an
 interruption computes only the maps that are missing.
 """
 import os
@@ -28,10 +28,10 @@ import models
 import pulses
 
 SIGMAS = (0.02, 0.05, 0.1, 0.2, 0.4, 0.7, 1.0, 1.5, 2.0, 3.0)      # pulse standard deviations (meV^-1)
-ETA = models.EX2["eta"]
-AXES = models.EX2_AXES
-OUT = models.DATA / "example2_pulses.npz"
-CACHE = models.RESULTS / "cache" / "example2_pulses"          # one file per (sigma, field): an interrupted run resumes here
+ETA = models.EX1["eta"]
+AXES = models.EX1_AXES
+OUT = models.DATA / "example1_pulses.npz"
+CACHE = models.RESULTS / "cache" / "example1_pulses"          # one file per (sigma, field): an interrupted run resumes here
 
 
 def cache_file(sigma, rwa):
@@ -51,11 +51,11 @@ def job(arguments):
     if cache_file(sigma, rwa).exists():
         stored = np.load(cache_file(sigma, rwa))
         return sigma, rwa, stored["signal"], float(stored["seconds"])
-    energies, mu, mu_plus, rho0 = pulses.chain_system(models.EX2["max_magnons"], models.EX2["temperature"])
-    carrier = float(np.sort(np.linalg.eigvalsh(models.example2_model()[1][1]))[0])      # the bright k = 0 magnon energy
+    energies, mu, mu_plus, rho0 = pulses.chain_system(models.EX1["max_magnons"], models.EX1["temperature"])
+    carrier = float(np.sort(np.linalg.eigvalsh(models.example1_model()[1][1]))[0])      # the bright k = 0 magnon energy
     start = time.perf_counter()
     signal = pulses.rephasing_map(energies, mu, mu_plus, rho0, sigma, carrier, rwa, AXES["omega_1q"], AXES["omega_emit"],
-                                  ETA, t2=models.EX2["t2"], dt=time_step(sigma))
+                                  ETA, t2=models.EX1["t2"], dt=time_step(sigma))
     elapsed = time.perf_counter() - start
     CACHE.mkdir(parents=True, exist_ok=True)
     np.savez(cache_file(sigma, rwa), signal=signal, seconds=elapsed)
@@ -64,11 +64,11 @@ def job(arguments):
 
 def reference():
     from qudpy_fdgf import SpectroscopySolver
-    model, _ = models.example2_model()
+    model, _ = models.example1_model()
     solver = SpectroscopySolver(backend="sparse_sector", eta=ETA, krylov_tolerance=1e-11)
-    solver.feed_model(model, context=models.example2_context())
-    result = solver.generate_spectrum(models.EX2_PROTOCOL, AXES, pathways=models.EX2_PATHWAYS_ALL,
-                                      fixed_coordinates={"t2": models.EX2["t2"]})
+    solver.feed_model(model, context=models.example1_context())
+    result = solver.generate_spectrum(models.EX1_PROTOCOL, AXES, pathways=models.EX1_PATHWAYS_ALL,
+                                      fixed_coordinates={"t2": models.EX1["t2"]})
     return result.components["rephasing"]
 
 

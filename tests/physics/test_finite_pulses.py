@@ -1,6 +1,6 @@
 """Time-domain calculation with Gaussian pulses of finite duration (validation/pulses.py).
 
-The engine behind the study of the impulsive limit and of the rotating-wave approximation (validation/analysis/example2_pulses.ipynb)
+The engine behind the study of the impulsive limit and of the rotating-wave approximation (validation/analysis/example1_pulses.ipynb)
 is checked on a closed three-level ladder (ground state, one excitation at 1.0, two at 2.05):
 
 - the hierarchy of the multilinear terms agrees with a direct, non-perturbative propagation with phase cycling and

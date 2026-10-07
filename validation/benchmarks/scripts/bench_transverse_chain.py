@@ -49,7 +49,7 @@ report = {"L": L, "D": 2**L, "mode": MODE, "memory_limit_mb": LIMIT, "threads": 
 
 # ---------------------------------------------------------------- Hamiltonian (sparse, then dense)
 start = time.perf_counter()
-H, N_op, M = models.example2_chain(L)
+H, N_op, M = models.example1_chain(L)
 sx = [qt.tensor([qt.sigmax() / 2 if k == j else qt.qeye(2) for k in range(L)]) for j in range(L)]
 H = H + TRANSVERSE * sum(sx)
 mu = (2 / np.sqrt(L)) * sum(sx)
@@ -66,16 +66,16 @@ del H_dense, mu_dense
 
 # ---------------------------------------------------------------- solver and spectrum
 options = {} if MODE == "exact" else {"diagonal_solve": False, "preconditioner": None}
-solver = SpectroscopySolver(backend="sparse_sector", eta=models.EX2["eta"], krylov_tolerance=1e-10, check_stationarity="off",
+solver = SpectroscopySolver(backend="sparse_sector", eta=models.EX1["eta"], krylov_tolerance=1e-10, check_stationarity="off",
                             **options)
 start = time.perf_counter()
 solver.feed_model(model)
 report["feed_s"] = time.perf_counter() - start
-pathways = tuple(models.EX2_PATHWAYS)
+pathways = tuple(models.EX1_PATHWAYS)
 axes = {"omega_1q": np.linspace(-1.55, -0.55, GRID), "omega_emit": np.linspace(0.55, 1.55, GRID)}
 start = time.perf_counter()
 extra = {} if LIMIT is None else {"memory_limit_mb": LIMIT}
-result = solver.generate_spectrum(models.EX2_PROTOCOL, axes, pathways=pathways, fixed_coordinates={"t2": 0.0}, **extra)
+result = solver.generate_spectrum(models.EX1_PROTOCOL, axes, pathways=pathways, fixed_coordinates={"t2": 0.0}, **extra)
 report["spectrum_s"] = time.perf_counter() - start
 report["peak_total_MB"] = peak_mb()
 statistics = result.diagnostics["solver"]

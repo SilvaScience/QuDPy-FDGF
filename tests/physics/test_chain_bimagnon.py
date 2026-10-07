@@ -7,7 +7,7 @@ sector, 0.434 meV below the free pair 2 omega(2 pi / L). The distance to 2 omega
 two magnons cannot both be at k = 0. It is the displacement of the excited-state-absorption line from the bright line,
 which the third-order spectrum shows.
 
-Built with NumPy only (Pauli matrices); the same numbers, with QuTiP, are in examples/example2_xxz_chain_thermal.ipynb.
+Built with NumPy only (Pauli matrices); the same numbers, with QuTiP, are in examples/example1_xxz_chain_thermal.ipynb.
 """
 from math import comb
 

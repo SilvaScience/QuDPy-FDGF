@@ -14,11 +14,11 @@ S_ij = <G_j | mid F_i> (N + N propagations instead of N x N):
 For each accuracy target the cheapest (dt, T, transform) that reaches it is searched; dt goes up to 3.2 eV^-1,
 beyond the Nyquist step of the carrier (pi / 2.5 eV): the signal lies in a band of 1 eV, so sampling at the bandwidth
 folds the band onto itself without overlap (bandpass sampling), and the error measured includes any aliasing. Problems: the open two-level
-system of Example 1 at three line widths (R1 + R2, t2 = 10 eV^-1, window of 1 eV per axis, eta = 2 meV), and the
-fifth-order 2Q response of Example 3 (D = 10, seven pathways, 151 x 151 grid, eta = 8 and 2 meV). ``modes`` and ``chi5`` are the
-problems of the article: the two coupled dissipative modes of Example 2 (third order, 0.4 eV per axis, rates of the example and
-divided by ten) and its closed limit at fifth order (eta = 2 and 1 meV).
-Results: results/data/resolved_map.json.   Usage: python bench_resolved_map.py [example1 | example3 | modes | chi5 | refresh-sparse]
+system of the quickstart at three line widths (R1 + R2, t2 = 10 eV^-1, window of 1 eV per axis, eta = 2 meV); ``modes`` and
+``chi5``, the problems of the article: the two coupled dissipative modes of Example 2 (third order, 0.4 eV per axis, rates of the
+example and divided by ten) and its closed limit at fifth order (D = 10, seven pathways, eta = 2 and 1 meV). The former
+fifth-order case of two bosonic modes (Example 3) is archived with its results in old_files/.
+Results: results/data/resolved_map.json.   Usage: python bench_resolved_map.py [quickstart | modes | chi5 | refresh-sparse]
 ``refresh-sparse`` measures again only the direct evaluation with the sparse backend (its solver changed: a diagonal
 generator is now solved by division) and updates those entries of the stored result.
 """
@@ -230,7 +230,7 @@ def report_routes(name, eta, model, protocol, scanned, fixed, pathways, windows,
 
 
 # ----------------------------------------------------------------------------------------- problems
-def example1(only_sparse=False):
+def quickstart(only_sparse=False):
     H = np.diag([0.0, 2.0]).astype(complex)
     MU = 0.5 * np.array([[0, 1], [1, 0]], dtype=complex)
     L_RAD = np.array([[0, 1], [0, 0]], dtype=complex)
@@ -241,7 +241,7 @@ def example1(only_sparse=False):
     protocol = standard_nq_protocol(order=1, n_interactions=3, nq_interval=1, detection_interval=3,
                                     nq_axis="w1", detection_axis="w3")
     report = {}
-    for name, (gamma_1, gamma_phi) in {"example1": (0.04, 0.03), "weak_damping": (0.004, 0.003), "closed": (0.0, 0.0)}.items():
+    for name, (gamma_1, gamma_phi) in {"quickstart": (0.04, 0.03), "weak_damping": (0.004, 0.003), "closed": (0.0, 0.0)}.items():
         channels = ([(L_RAD, gamma_1)] if gamma_1 > 0 else []) + ([(SZ, gamma_phi / 2)] if gamma_phi > 0 else [])
         model = EigenbasisKModel(H, MU, c_ops_raw=tuple(channels))
         width = gamma_1 / 2 + gamma_phi + eta
@@ -253,35 +253,22 @@ def example1(only_sparse=False):
     return report
 
 
-def example3(only_sparse=False):
-    from models import EX3_AXES, EX3_FIXED, EX3_PROTOCOL, example3_model, example3_pathways
-    pathways = example3_pathways()
-    report = {}
-    for eta in (0.008, 0.002):
-        spacing = EX3_AXES["omega_2q"][1] - EX3_AXES["omega_2q"][0]
-        windows = ((EX3_AXES["omega_2q"][0], EX3_AXES["omega_2q"][-1]), (EX3_AXES["omega_emit"][0], EX3_AXES["omega_emit"][-1]))
-        report[f"{1000 * eta:.0f}meV"] = report_routes(f"example3 eta = {1000 * eta:.0f} meV", eta, example3_model(), EX3_PROTOCOL,
-                                                      ("omega_2q", "omega_emit"), EX3_FIXED, pathways, windows, spacing,
-                                                      eta, (1.6, 0.8, 0.4), (1.0, 1.5), only_sparse=only_sparse)
-    return report
-
-
 def modes(only_sparse=False):
     """Example 2 (two coupled dissipative modes): third order, R_GSB + R_SE + R_ESA, polarization, 0.4 eV per axis.
 
     The rates are those of Example 2 and, in the second case, divided by ten (narrowest coherence 5.6 and 0.56 meV).
     """
-    from models import EX4, EX4_AXES, EX4_PATHWAYS, EX4_PROTOCOL, example4_model
-    eta, fixed = EX4["eta"], {"t2": EX4["t2"]}
-    windows = ((float(EX4_AXES["omega_1q"][0]), float(EX4_AXES["omega_1q"][-1])),
-               (float(EX4_AXES["omega_emit"][0]), float(EX4_AXES["omega_emit"][-1])))
+    from models import EX2, EX2_AXES, EX2_PATHWAYS, EX2_PROTOCOL, example2_model
+    eta, fixed = EX2["eta"], {"t2": EX2["t2"]}
+    windows = ((float(EX2_AXES["omega_1q"][0]), float(EX2_AXES["omega_1q"][-1])),
+               (float(EX2_AXES["omega_emit"][0]), float(EX2_AXES["omega_emit"][-1])))
     report = {}
     for name, factor in {"baseline": 1.0, "rates_divided_by_ten": 0.1}.items():
-        changes = {key: EX4[key] * factor for key in ("gamma_phi", "k_relax", "k_transfer", "k_rad")}
+        changes = {key: EX2[key] * factor for key in ("gamma_phi", "k_relax", "k_transfer", "k_rad")}
         width = (changes["gamma_phi"] + changes["k_relax"] + changes["k_rad"]) / 2 + eta        # the narrowest coherence
         spacing = 2 * np.sqrt(3) * width / 4
-        report[name] = report_routes(f"modes {name}", eta, example4_model(**changes), EX4_PROTOCOL, ("omega_1q", "omega_emit"),
-                                     fixed, EX4_PATHWAYS, windows, spacing, width, (6.4, 3.2, 1.6, 0.8, 0.4), (1.0, 1.5, 2.0),
+        report[name] = report_routes(f"modes {name}", eta, example2_model(**changes), EX2_PROTOCOL, ("omega_1q", "omega_emit"),
+                                     fixed, EX2_PATHWAYS, windows, spacing, width, (6.4, 3.2, 1.6, 0.8, 0.4), (1.0, 1.5, 2.0),
                                      only_sparse=only_sparse)
         report[name]["rate_factor"] = factor
     return report
@@ -289,14 +276,14 @@ def modes(only_sparse=False):
 
 def chi5(only_sparse=False):
     """Closed limit of Example 2: fifth-order 2Q response, D = 10, seven pathways, eta = 2 and 1 meV, spacing eta."""
-    from models import EX4_CHI5_AXES, EX4_CHI5_FIXED, EX4_CHI5_PROTOCOL, example4_chi5_model, example4_chi5_pathways
-    pathways = example4_chi5_pathways()
-    windows = ((float(EX4_CHI5_AXES["omega_2q"][0]), float(EX4_CHI5_AXES["omega_2q"][-1])),
-               (float(EX4_CHI5_AXES["omega_emit"][0]), float(EX4_CHI5_AXES["omega_emit"][-1])))
+    from models import EX2_CHI5_AXES, EX2_CHI5_FIXED, EX2_CHI5_PROTOCOL, example2_chi5_model, example2_chi5_pathways
+    pathways = example2_chi5_pathways()
+    windows = ((float(EX2_CHI5_AXES["omega_2q"][0]), float(EX2_CHI5_AXES["omega_2q"][-1])),
+               (float(EX2_CHI5_AXES["omega_emit"][0]), float(EX2_CHI5_AXES["omega_emit"][-1])))
     report = {}
     for eta in (0.002, 0.001):
-        report[f"{1000 * eta:.0f}meV"] = report_routes(f"chi5 eta = {1000 * eta:.0f} meV", eta, example4_chi5_model(), EX4_CHI5_PROTOCOL,
-                                                      ("omega_2q", "omega_emit"), EX4_CHI5_FIXED, pathways, windows, eta,
+        report[f"{1000 * eta:.0f}meV"] = report_routes(f"chi5 eta = {1000 * eta:.0f} meV", eta, example2_chi5_model(), EX2_CHI5_PROTOCOL,
+                                                      ("omega_2q", "omega_emit"), EX2_CHI5_FIXED, pathways, windows, eta,
                                                       eta, (1.6, 0.8, 0.4), (1.0, 1.5), only_sparse=only_sparse)
     return report
 
@@ -306,16 +293,13 @@ if __name__ == "__main__":
     DATA.mkdir(parents=True, exist_ok=True)
     report = json.loads(OUT.read_text()) if OUT.exists() else {}
     if which == "refresh-sparse":
-        for key, function in (("example1", example1), ("example3", example3)):
+        for key, function in (("quickstart", quickstart),):
             fresh = function(only_sparse=True)
             for name, entry in fresh.items():
                 report[key][name]["direct_sparse"] = entry["direct_sparse"]
         OUT.write_text(json.dumps(report, indent=2))
-    if which in ("all", "example1"):
-        report["example1"] = example1()
-        OUT.write_text(json.dumps(report, indent=2))
-    if which in ("all", "example3"):
-        report["example3"] = example3()
+    if which in ("all", "quickstart"):
+        report["quickstart"] = quickstart()
         OUT.write_text(json.dumps(report, indent=2))
     if which in ("all", "modes"):
         report["modes"] = modes()

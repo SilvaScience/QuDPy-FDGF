@@ -20,8 +20,8 @@ import time
 
 import numpy as np
 from qudpy_fdgf import SpectroscopySolver
-from models import (DATA, EX4, EX4_AXES, EX4_CHI5_AXES, EX4_CHI5_ETA, EX4_CHI5_FIXED, EX4_CHI5_PROTOCOL, EX4_PATHWAYS,
-                    EX4_PROTOCOL, example4_chi5_model, example4_chi5_pathways, example4_model)
+from models import (DATA, EX2, EX2_AXES, EX2_CHI5_AXES, EX2_CHI5_ETA, EX2_CHI5_FIXED, EX2_CHI5_PROTOCOL, EX2_PATHWAYS,
+                    EX2_PROTOCOL, example2_chi5_model, example2_chi5_pathways, example2_model)
 
 SMALL = 31
 
@@ -31,10 +31,10 @@ def subgrid(axes, n):
 
 
 PROBLEMS = {
-    "open": dict(eta=EX4["eta"], model=example4_model, protocol=EX4_PROTOCOL, axes=EX4_AXES, fixed={"t2": EX4["t2"]},
-                 pathways=lambda: EX4_PATHWAYS),
-    "closed": dict(eta=EX4_CHI5_ETA, model=example4_chi5_model, protocol=EX4_CHI5_PROTOCOL, axes=EX4_CHI5_AXES,
-                   fixed=EX4_CHI5_FIXED, pathways=example4_chi5_pathways),
+    "open": dict(eta=EX2["eta"], model=example2_model, protocol=EX2_PROTOCOL, axes=EX2_AXES, fixed={"t2": EX2["t2"]},
+                 pathways=lambda: EX2_PATHWAYS),
+    "closed": dict(eta=EX2_CHI5_ETA, model=example2_chi5_model, protocol=EX2_CHI5_PROTOCOL, axes=EX2_CHI5_AXES,
+                   fixed=EX2_CHI5_FIXED, pathways=example2_chi5_pathways),
 }
 
 

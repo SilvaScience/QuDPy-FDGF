@@ -1,6 +1,6 @@
-"""Time and memory versus Hilbert dimension: Example 2 scaled in chain length.
+"""Time and memory versus Hilbert dimension: Example 1 scaled in chain length.
 
-The XXZ chain of Example 2 at its published settings (magnon cutoff N_max = 4, canonical
+The XXZ chain of Example 1 at its published settings (magnon cutoff N_max = 4, canonical
 state at 4 K, eta = 0.03 meV, rephasing GSB + SE + ESA, t2 = 0) is enlarged from L = 4 to
 L = 10 sites, D = sum_{N<=4} C(L, N) = 16, 31, 57, 99, 163, 256, 386. The task is a
 9 x 9 subgrid of the published frequency window. Four configurations, each in its own process
@@ -49,23 +49,23 @@ def worker(config, n_sites):
     import numpy as np
     import psutil
     from qudpy_fdgf import SpectroscopySolver
-    from models import (EX2, EX2_PATHWAYS, EX2_PROTOCOL, example2_context,
-                        example2_dimension, example2_model)
+    from models import (EX1, EX1_PATHWAYS, EX1_PROTOCOL, example1_context,
+                        example1_dimension, example1_model)
 
     settings = CONFIGS[config]
     options = dict(settings["options"])
     if settings["backend"] == "sparse_sector":
-        options["krylov_tolerance"] = EX2["krylov_tolerance"]
+        options["krylov_tolerance"] = EX1["krylov_tolerance"]
     process = psutil.Process()
     base = process.memory_info().wset
     axes = {"omega_1q": np.linspace(-1.55, -0.55, GRID), "omega_emit": np.linspace(0.55, 1.55, GRID)}
     t0 = time.perf_counter()
-    model, _ = example2_model(n_sites=n_sites)
-    solver = SpectroscopySolver(backend=settings["backend"], eta=EX2["eta"], **options)
-    solver.feed_model(model, context=example2_context())
+    model, _ = example1_model(n_sites=n_sites)
+    solver = SpectroscopySolver(backend=settings["backend"], eta=EX1["eta"], **options)
+    solver.feed_model(model, context=example1_context())
     t1 = time.perf_counter()
-    result = solver.generate_spectrum(EX2_PROTOCOL, axes, pathways=EX2_PATHWAYS,
-                                      fixed_coordinates={"t2": EX2["t2"]}, strategy=settings["strategy"])
+    result = solver.generate_spectrum(EX1_PROTOCOL, axes, pathways=EX1_PATHWAYS,
+                                      fixed_coordinates={"t2": EX1["t2"]}, strategy=settings["strategy"])
     t2 = time.perf_counter()
     peak = process.memory_info().peak_wset - base
     np.save(OUT / f"scaling_{config}_{n_sites}.npy", result.components["rephasing"])
@@ -73,7 +73,7 @@ def worker(config, n_sites):
     statistics = diagnostics["solver"]
     print(json.dumps({
         "config": config, "backend": settings["backend"], "L": n_sites,
-        "D": example2_dimension(n_sites, EX2["max_magnons"]), "grid": [GRID, GRID],
+        "D": example1_dimension(n_sites, EX1["max_magnons"]), "grid": [GRID, GRID],
         "strategy": diagnostics["strategy"], "preconditioner": statistics.get("preconditioner"),
         "build_s": t1 - t0, "spectrum_s": t2 - t1, "peak_MB": peak / 1e6,
         "resolvent_solves": diagnostics["resolvent_solves"],

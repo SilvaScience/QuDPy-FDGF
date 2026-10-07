@@ -5,7 +5,7 @@ fifth-order 2Q signal must cancel. With an anharmonicity the cancellation is lif
 manifold cutoff (three excitations) is the one that closes the pathways, so the test also
 checks that the truncation itself creates no spurious response.
 
-The two-mode version of this check is in validation/analysis/example3_analysis.ipynb.
+The two-mode version of this check is in validation/analysis/example2_chi5_analysis.ipynb (closed limit of Example 2).
 """
 import numpy as np
 import pytest

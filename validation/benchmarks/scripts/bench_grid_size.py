@@ -24,10 +24,10 @@ import time
 
 import numpy as np
 from qudpy_fdgf import SpectroscopySolver
-from models import (EX1, EX1_AXES, EX1_PATHWAYS, EX1_PROTOCOL, EX2, EX2_AXES, EX2_PATHWAYS, EX2_PROTOCOL, EX4, EX4_AXES,
-                    EX4_CHI5_AXES, EX4_CHI5_ETA, EX4_CHI5_FIXED, EX4_CHI5_PROTOCOL, EX4_PATHWAYS, EX4_PROTOCOL,
-                    example1_model, example2_context, example2_model, example4_chi5_model, example4_chi5_pathways,
-                    example4_model)
+from models import (QS, QS_AXES, QS_PATHWAYS, QS_PROTOCOL, EX1, EX1_AXES, EX1_PATHWAYS, EX1_PROTOCOL, EX2, EX2_AXES,
+                    EX2_CHI5_AXES, EX2_CHI5_ETA, EX2_CHI5_FIXED, EX2_CHI5_PROTOCOL, EX2_PATHWAYS, EX2_PROTOCOL,
+                    quickstart_model, example1_context, example1_model, example2_chi5_model, example2_chi5_pathways,
+                    example2_model)
 
 
 def subgrid(axes, n):
@@ -37,29 +37,29 @@ def subgrid(axes, n):
 
 def problems():
     yield ("quickstart", "sparse", [5, 11, 21, 41, 81],
-           lambda: (SpectroscopySolver(backend="sparse_sector", eta=EX1["eta"]), example1_model(), None),
+           lambda: (SpectroscopySolver(backend="sparse_sector", eta=QS["eta"]), quickstart_model(), None),
            lambda solver, n, strategy: solver.generate_spectrum(
-               EX1_PROTOCOL, subgrid(EX1_AXES, n), pathways=EX1_PATHWAYS, fixed_coordinates={"t2": EX1["t2"]},
+               QS_PROTOCOL, subgrid(QS_AXES, n), pathways=QS_PATHWAYS, fixed_coordinates={"t2": QS["t2"]},
                strategy=strategy, warn_null=False), {"pointwise": 81, "factorized": 81})
     for label, options, limits in (("sparse", {}, {"pointwise": 33, "factorized": 65}),
                                    ("sparse_plain", {"preconditioner": None, "diagonal_solve": False}, {"pointwise": 5, "factorized": 33})):
         yield ("example1", label, [3, 5, 9, 17, 33, 65],
-               lambda options=options: (SpectroscopySolver(backend="sparse_sector", eta=EX2["eta"],
-                                                           krylov_tolerance=EX2["krylov_tolerance"], **options),
-                                        example2_model()[0], example2_context()),
+               lambda options=options: (SpectroscopySolver(backend="sparse_sector", eta=EX1["eta"],
+                                                           krylov_tolerance=EX1["krylov_tolerance"], **options),
+                                        example1_model()[0], example1_context()),
                lambda solver, n, strategy: solver.generate_spectrum(
-                   EX2_PROTOCOL, subgrid(EX2_AXES, n), pathways=EX2_PATHWAYS, fixed_coordinates={"t2": EX2["t2"]},
+                   EX1_PROTOCOL, subgrid(EX1_AXES, n), pathways=EX1_PATHWAYS, fixed_coordinates={"t2": EX1["t2"]},
                    strategy=strategy, warn_null=False), limits)
     yield ("example2", "sparse", [11, 31, 61, 151],
-           lambda: (SpectroscopySolver(backend="sparse_sector", eta=EX4["eta"]), example4_model(), None),
+           lambda: (SpectroscopySolver(backend="sparse_sector", eta=EX2["eta"]), example2_model(), None),
            lambda solver, n, strategy: solver.generate_spectrum(
-               EX4_PROTOCOL, subgrid(EX4_AXES, n), pathways=EX4_PATHWAYS, fixed_coordinates={"t2": EX4["t2"]},
+               EX2_PROTOCOL, subgrid(EX2_AXES, n), pathways=EX2_PATHWAYS, fixed_coordinates={"t2": EX2["t2"]},
                strategy=strategy, warn_null=False), {"pointwise": 61, "factorized": 151})
-    pathways = example4_chi5_pathways()
+    pathways = example2_chi5_pathways()
     yield ("example2_closed", "sparse", [11, 31, 61, 151],
-           lambda: (SpectroscopySolver(backend="sparse_sector", eta=EX4_CHI5_ETA), example4_chi5_model(), None),
+           lambda: (SpectroscopySolver(backend="sparse_sector", eta=EX2_CHI5_ETA), example2_chi5_model(), None),
            lambda solver, n, strategy: solver.generate_spectrum(
-               EX4_CHI5_PROTOCOL, subgrid(EX4_CHI5_AXES, n), pathways=pathways, fixed_coordinates=EX4_CHI5_FIXED,
+               EX2_CHI5_PROTOCOL, subgrid(EX2_CHI5_AXES, n), pathways=pathways, fixed_coordinates=EX2_CHI5_FIXED,
                strategy=strategy, warn_null=False), {"pointwise": 61, "factorized": 151})
 
 

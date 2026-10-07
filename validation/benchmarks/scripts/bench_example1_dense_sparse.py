@@ -1,11 +1,15 @@
-"""Example 1: dense versus sparse backend, pointwise versus factorized evaluation.
+"""Example 1 at its published size: dense versus sparse backend, pointwise versus factorized evaluation.
 
-Same model (models.py), pathways, protocol, grid, and observables as Listing 1 of the manuscript
-(polarization, action-detected population, integrated fluorescence), computed with
-backend="dense" and backend="sparse_sector" (default preconditioner), each with
-strategy="pointwise" and strategy="factorized". Reports the maximum difference between the
-backends and between the strategies, relative to the maximum of each map, and for every run the
-wall-clock time and the number of resolvent solves.
+XXZ chain (L = 6, N_max = 4, D = 57, canonical state at 4 K), rephasing GSB + SE + ESA,
+t2 = 0, eta = 0.03 meV, on a 5 x 5 subgrid of the published 60 x 60 window. Runs:
+
+    dense_factorized, dense_pointwise    dense backend (resolvent caching off, to keep its memory within
+                                         the test machine; the pointwise run is slow, 150 inversions)
+    sparse_plain_*                       sparse backend, preconditioner=None, diagonal_solve=False (plain GMRES)
+    sparse_*                             sparse backend, defaults (this generator is diagonal: solved by division)
+
+with strategy "factorized" and "pointwise". ``python bench_example1_dense_sparse.py skip-dense-pointwise``
+leaves out the slow run.
 """
 import os
 for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
@@ -18,59 +22,59 @@ import json
 import time
 
 import numpy as np
-from qudpy_fdgf import ObservableSpec, SpectroscopySolver
-from models import EX1, EX1_AXES, EX1_PATHWAYS, EX1_PROTOCOL, example1_model
+from qudpy_fdgf import SpectroscopySolver
+from models import EX1, EX1_AXES, EX1_PATHWAYS, EX1_PROTOCOL, example1_context, example1_model
 
-gamma_1 = EX1["gamma_1"]
-protocol, axes = EX1_PROTOCOL, EX1_AXES
-
-
-def run(backend, strategy):
-    solver = SpectroscopySolver(backend=backend, eta=EX1["eta"])
-    solver.feed_model(example1_model())
-    radiative = solver.jump_channel_names()[0]
-    observables = {
-        "polarization": "polarization",
-        "population": ObservableSpec.action(
-            "population", fourth_interaction="Bu", operator="excited_population"),
-        "fluorescence": ObservableSpec.mean_jump(
-            "fluorescence", radiative, time_window=(0.0, 5 / gamma_1),
-            fourth_interaction="Bu"),
-    }
-    start = time.perf_counter()
-    result = solver.generate_spectrum(protocol, axes, pathways=EX1_PATHWAYS,
-                                      fixed_coordinates={"t2": EX1["t2"]},
-                                      observables=observables, strategy=strategy)
-    return result, time.perf_counter() - start
-
-
-def worst_difference(first, second):
-    worst, details = 0.0, {}
-    for name in ("polarization", "population", "fluorescence"):
-        for path in ("R1", "R2", "R3"):
-            a, b = first.observables[name][path], second.observables[name][path]
-            rel = float(np.max(np.abs(a - b)) / np.max(np.abs(a)))
-            details[f"{name}/{path}"] = rel
-            worst = max(worst, rel)
-    return worst, details
-
+pick = np.linspace(0, 59, 5).round().astype(int)
+AXES = {"omega_1q": EX1_AXES["omega_1q"][pick], "omega_emit": EX1_AXES["omega_emit"][pick]}
+RUNS = {
+    "dense": ("dense", {"cache_resolvents": False}),
+    "sparse_plain": ("sparse_sector", {"krylov_tolerance": EX1["krylov_tolerance"], "preconditioner": None, "diagonal_solve": False}),
+    "sparse": ("sparse_sector", {"krylov_tolerance": EX1["krylov_tolerance"]}),
+}
+skip_dense_pointwise = "skip-dense-pointwise" in sys.argv
 
 results, runs = {}, {}
-for backend in ("dense", "sparse_sector"):
-    for strategy in ("pointwise", "factorized"):
-        result, elapsed = run(backend, strategy)
-        results[(backend, strategy)] = result
-        runs[f"{backend}_{strategy}"] = {"time_s": elapsed, "resolvent_solves": result.diagnostics["resolvent_solves"],
-                                         "propagations": result.diagnostics["propagations"]}
-        print(f"{backend:14s} {strategy:10s} {elapsed:8.3f} s, {result.diagnostics['resolvent_solves']} solves", flush=True)
+for name, (backend, options) in RUNS.items():
+    for strategy in ("factorized", "pointwise"):
+        if name == "dense" and strategy == "pointwise" and skip_dense_pointwise:
+            continue
+        model, _ = example1_model()
+        solver = SpectroscopySolver(backend=backend, eta=EX1["eta"], **options)
+        solver.feed_model(model, context=example1_context())
+        start = time.perf_counter()
+        res = solver.generate_spectrum(EX1_PROTOCOL, AXES, pathways=EX1_PATHWAYS,
+                                       fixed_coordinates={"t2": EX1["t2"]}, strategy=strategy)
+        elapsed = time.perf_counter() - start
+        results[(name, strategy)] = res
+        statistics = res.diagnostics["solver"]
+        runs[f"{name}_{strategy}"] = {
+            "time_s": elapsed, "resolvent_solves": res.diagnostics["resolvent_solves"],
+            "resolvent_factorizations": res.diagnostics.get("resolvent_factorizations"),
+            "iterations_mean": statistics.get("iterations_mean"), "preconditioner": statistics.get("preconditioner")}
+        print(f"{name:13s} {strategy:10s} {elapsed:9.2f} s, {res.diagnostics['resolvent_solves']} solves", flush=True)
 
-worst, details = worst_difference(results[("dense", "factorized")], results[("sparse_sector", "factorized")])
-strategy_difference = {backend: worst_difference(results[(backend, "pointwise")], results[(backend, "factorized")])[0]
-                       for backend in ("dense", "sparse_sector")}
-report = {"grid": [41, 41], "t2": 10.0, "eta": 0.002, "runs": runs,
-          "time_dense_s": runs["dense_factorized"]["time_s"], "time_sparse_s": runs["sparse_sector_factorized"]["time_s"],
-          "relative_difference": details, "worst": worst, "strategy_difference": strategy_difference}
-print(f"dense versus sparse: worst = {worst:.2e}; pointwise versus factorized: {strategy_difference}")
+
+def difference(first, second):
+    return {p.name: float(np.max(abs(first.pathways[p.name] - second.pathways[p.name]))
+                          / np.max(abs(first.pathways[p.name]))) for p in EX1_PATHWAYS}
+
+
+report = {"D": 57, "grid": [5, 5], "eta_meV": EX1["eta"], "runs": runs,
+          "time_dense_s": runs["dense_factorized"]["time_s"], "time_sparse_s": runs["sparse_factorized"]["time_s"],
+          "time_sparse_plain_s": runs["sparse_plain_factorized"]["time_s"],
+          "relative_difference": difference(results[("dense", "factorized")], results[("sparse", "factorized")]),
+          "relative_difference_plain": difference(results[("dense", "factorized")], results[("sparse_plain", "factorized")]),
+          "strategy_difference": {name: max(difference(results[(name, "pointwise")], results[(name, "factorized")]).values())
+                                  for name in RUNS if (name, "pointwise") in results}}
+report["worst"] = max(max(report["relative_difference"].values()), max(report["relative_difference_plain"].values()))
+print(json.dumps(report["strategy_difference"]), f"worst dense versus sparse = {report['worst']:.2e}")
 out = DATA
 out.mkdir(parents=True, exist_ok=True)
+previous = out / "example1_dense_sparse.json"
+if skip_dense_pointwise and "dense_pointwise" not in runs and previous.exists():
+    old_runs = json.loads(previous.read_text()).get("runs", {})
+    if "dense_pointwise" in old_runs:                 # the 15-minute dense pointwise run is kept from the previous result
+        runs["dense_pointwise"] = old_runs["dense_pointwise"]
+        report["strategy_difference_note"] = "dense_pointwise kept from an earlier run"
 (out / "example1_dense_sparse.json").write_text(json.dumps(report, indent=2))

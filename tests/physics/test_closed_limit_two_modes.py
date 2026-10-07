@@ -1,6 +1,6 @@
-"""Fifth-order double-quantum response of the closed two-mode model of Example 4.
+"""Fifth-order double-quantum response of the closed two-mode model of Example 2.
 
-The Hamiltonian of Example 4 without dissipation (omega 1.0 and 1.2, J = 1 meV, anharmonicity 10 meV),
+The Hamiltonian of Example 2 without dissipation (omega 1.0 and 1.2, J = 1 meV, anharmonicity 10 meV),
 on the states with n_a + n_b <= N_max. Three exact properties, none of which depends on how the spectrum looks:
 
 - with the anharmonicity set to zero the seven UFSS pathways cancel, which needs the complete three-excitation
@@ -8,7 +8,7 @@ on the states with n_a + n_b <= N_max. Three exact properties, none of which dep
 - with the anharmonicity the cancellation is lifted;
 - for J = 0 the response of the two modes is the sum of the responses of two independent one-mode models.
 
-The same checks, with figures, are in validation/analysis/example4_chi5_analysis.ipynb.
+The same checks, with figures, are in validation/analysis/example2_chi5_analysis.ipynb.
 """
 import numpy as np
 import pytest

@@ -1,4 +1,4 @@
-"""Fast analytical checks taken from the manuscript (Example 1 and the Quick start).
+"""Fast analytical checks taken from the manuscript (the quickstart notebook and the Quick start script).
 
 Each check compares a numerical result with a closed-form value:
 - linear absorption of an open two-level system: FWHM = 2 (Gamma_2 + eta);
@@ -7,9 +7,9 @@ Each check compares a numerical result with a closed-form value:
   is non-zero only because the radiative channel refills the ground state (R1 + R2 alone give 1 + exp(-gamma_1 t2));
 - action-detected population: S_pop = -i S_pol (Eq. action_pol_identity);
 - integrated fluorescence: N_rad / P_e = 1 - exp(-gamma_1 T), exactly;
-- dense and sparse backends agree for all three observables of Example 1.
+- dense and sparse backends agree for all three observables of the quickstart.
 
-The same relations are shown, with figures, in validation/analysis/example1_analysis.ipynb.
+The same relations are shown, with figures, in validation/analysis/quickstart_analysis.ipynb.
 """
 import numpy as np
 import pytest
@@ -46,7 +46,7 @@ PROTOCOL = standard_nq_protocol(order=1, n_interactions=3, nq_interval=1,
                                 detection_axis="omega_emit")
 
 
-def example1_solver(backend="dense", eta=0.002, gamma_1=GAMMA_1):
+def quickstart_solver(backend="dense", eta=0.002, gamma_1=GAMMA_1):
     channels = ((L_RAD, gamma_1), (SIGMA_Z, GAMMA_PHI / 2)) if gamma_1 > 0 else ((SIGMA_Z, GAMMA_PHI / 2),)
     model = EigenbasisKModel(
         H, MU,
@@ -58,7 +58,7 @@ def example1_solver(backend="dense", eta=0.002, gamma_1=GAMMA_1):
     return solver
 
 
-def example1_observables(solver, n_steps=101):
+def quickstart_observables(solver, n_steps=101):
     return {
         "polarization": "polarization",
         "population": ObservableSpec.action(
@@ -70,7 +70,7 @@ def example1_observables(solver, n_steps=101):
 
 
 def test_linear_width_matches_coherence_decay():
-    solver = example1_solver(eta=1e-4)
+    solver = quickstart_solver(eta=1e-4)
     linear = FrequencyPathway("linear", interactions=[{"label": "Ku"}], component="linear")
     protocol = SpectroscopyProtocol(intervals=[PropagationInterval("omega1", "frequency")])
     w = np.linspace(1.8, 2.2, 8001)
@@ -83,7 +83,7 @@ def test_linear_width_matches_coherence_decay():
 
 def test_rephasing_peak_amplitude_and_position():
     eta = 0.002
-    solver = example1_solver(eta=eta)
+    solver = quickstart_solver(eta=eta)
     axes = {"omega_1q": np.array([-2.0]), "omega_emit": np.array([2.0])}
     result = solver.generate_spectrum(PROTOCOL, axes, pathways=(R1, R2),
                                       fixed_coordinates={"t2": 0.0})
@@ -93,7 +93,7 @@ def test_rephasing_peak_amplitude_and_position():
 
 def test_complete_rephasing_response_includes_the_relaxation_pathway():
     eta, t2, d = 0.002, 10.0, 0.5
-    solver = example1_solver(eta=eta)
+    solver = quickstart_solver(eta=eta)
     w1 = np.linspace(-2.3, -1.7, 7)
     w3 = np.linspace(1.7, 2.3, 7)
     result = solver.generate_spectrum(PROTOCOL, {"omega_1q": w1, "omega_emit": w3}, pathways=(R1, R2, R3),
@@ -112,7 +112,7 @@ def test_complete_rephasing_response_includes_the_relaxation_pathway():
 
 
 def test_relaxation_pathway_vanishes_without_radiative_decay():
-    solver = example1_solver(gamma_1=0.0)
+    solver = quickstart_solver(gamma_1=0.0)
     axes = {"omega_1q": np.array([-2.0]), "omega_emit": np.array([2.0])}
     with pytest.warns(NullPathwayWarning, match="'R3'"):
         result = solver.generate_spectrum(PROTOCOL, axes, pathways=(R1, R2, R3), fixed_coordinates={"t2": 10.0})
@@ -122,11 +122,11 @@ def test_relaxation_pathway_vanishes_without_radiative_decay():
 
 
 def test_action_population_and_fluorescence():
-    solver = example1_solver()
+    solver = quickstart_solver()
     axes = {"omega_1q": np.linspace(-2.5, -1.5, 5), "omega_emit": np.linspace(1.5, 2.5, 5)}
     result = solver.generate_spectrum(PROTOCOL, axes, pathways=(R1, R2, R3),
                                       fixed_coordinates={"t2": 10.0},
-                                      observables=example1_observables(solver))
+                                      observables=quickstart_observables(solver))
     for name in ("R1", "R2", "R3"):
         s_pol = result.observables["polarization"][name]
         s_pop = result.observables["population"][name]
@@ -136,14 +136,14 @@ def test_action_population_and_fluorescence():
     assert np.max(np.abs(ratio - exact)) / exact < 1e-12          # exact window integral
 
 
-def test_dense_and_sparse_backends_agree_for_example1():
+def test_dense_and_sparse_backends_agree_for_quickstart():
     axes = {"omega_1q": np.linspace(-2.5, -1.5, 3), "omega_emit": np.linspace(1.5, 2.5, 3)}
     results = {}
     for backend in ("dense", "sparse_sector"):
-        solver = example1_solver(backend)
+        solver = quickstart_solver(backend)
         results[backend] = solver.generate_spectrum(
             PROTOCOL, axes, pathways=(R1, R2, R3), fixed_coordinates={"t2": 10.0},
-            observables=example1_observables(solver))
+            observables=quickstart_observables(solver))
     for name in ("polarization", "population", "fluorescence"):
         for pathway in ("R1", "R2", "R3"):
             a = results["dense"].observables[name][pathway]

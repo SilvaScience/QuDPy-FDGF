@@ -1,4 +1,4 @@
-"""Regenerate fig_example1_projection.pdf (Example 1: the readout interaction selects the population).
+"""Regenerate fig_quickstart_projection.pdf (the quickstart: the readout interaction selects the population).
 
 All nine maps come from a single third-order propagation of the rephasing pathways R1 + R2 + R3 at
 t2 = 10 eV^-1 and share one color scale.
@@ -12,7 +12,7 @@ of S^(4)_Pe = -i S^(3)_pol.
 
 Model, pathways and protocol come from models.py; grid 241 x 241, eta = 0.002 eV.
 
-Usage:  python fig_example1_projection.py
+Usage:  python fig_quickstart_projection.py
 """
 import os
 import sys
@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from qudpy_fdgf import ObservableSpec, SpectroscopySolver
-from models import EX1, EX1_PATHWAYS, EX1_PROTOCOL, FIGURES, example1_model, results_dirs
+from models import QS, QS_PATHWAYS, QS_PROTOCOL, FIGURES, quickstart_model, results_dirs
 
 results_dirs()
 N_POINTS = 241
@@ -37,19 +37,19 @@ LABELS = (("Bu", -1), ("Kd", -1), ("Ku", +1), ("Bd", +1))
 DETECTORS = (("excited_population", r"detect $P_e$"), ("ground_population", r"detect $P_g$"))
 
 # ------------------------------------------------------------------ one propagation, nine maps
-solver = SpectroscopySolver(backend="dense", eta=EX1["eta"])
-solver.feed_model(example1_model())
+solver = SpectroscopySolver(backend="dense", eta=QS["eta"])
+solver.feed_model(quickstart_model())
 observables = {"polarization": "polarization"}
 for label, _ in LABELS:
     for operator, _ in DETECTORS:
         observables[f"{label}/{operator}"] = ObservableSpec.action(
             f"{label}/{operator}", fourth_interaction=label, operator=operator)
-result = solver.generate_spectrum(EX1_PROTOCOL, axes, pathways=EX1_PATHWAYS,
-                                  fixed_coordinates={"t2": EX1["t2"]}, observables=observables)
+result = solver.generate_spectrum(QS_PROTOCOL, axes, pathways=QS_PATHWAYS,
+                                  fixed_coordinates={"t2": QS["t2"]}, observables=observables)
 
 
 def total(name):
-    return sum(result.observables[name][p.name] for p in EX1_PATHWAYS)
+    return sum(result.observables[name][p.name] for p in QS_PATHWAYS)
 
 
 reference = np.abs(total("polarization"))
@@ -109,6 +109,6 @@ colorbar_ax = fig.add_axes([0.925, rows[1], 0.018, rows[0] + H - rows[1]])
 fig.colorbar(image, cax=colorbar_ax)
 colorbar_ax.set_title(r"$|S|$", fontsize=8)
 
-fig.savefig(FIGURES / "fig_example1_projection.pdf", bbox_inches="tight")
-fig.savefig(FIGURES / "fig_example1_projection.png", dpi=200, bbox_inches="tight")
-print("saved", FIGURES / "fig_example1_projection.pdf")
+fig.savefig(FIGURES / "fig_quickstart_projection.pdf", bbox_inches="tight")
+fig.savefig(FIGURES / "fig_quickstart_projection.png", dpi=200, bbox_inches="tight")
+print("saved", FIGURES / "fig_quickstart_projection.pdf")

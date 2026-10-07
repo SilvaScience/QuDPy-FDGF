@@ -10,7 +10,7 @@ from weak to far above the energy scale, and two broadenings.
     python bench_preconditioner_dissipative.py [chain3 | collective | local | all]
 
 Models: the three-site hard-core chain of the tests (rates x 0.1 to x 1000); the six-site XXZ chain of
-Example 2 (D = 57, thermal state at 4 K) with collective decay or local dephasing from 0.001 to 10 meV.
+Example 1 (D = 57, thermal state at 4 K) with collective decay or local dephasing from 0.001 to 10 meV.
 Results are merged by group into results/data/preconditioner_dissipative.json (about 3 min per group for the XXZ chain).
 """
 import os
@@ -19,7 +19,7 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 import sys
 from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))               # validation/ (models.py)
-from models import DATA, EX2_AXES, example2_chain, example2_context
+from models import DATA, EX1_AXES, example1_chain, example1_context
 import json
 import time
 import warnings
@@ -55,8 +55,8 @@ def three_site_chain(scale):
 
 
 def xxz_chain(kind, rate, n_sites=6):
-    """Example 2 chain with collective lowering or local number dephasing at ``rate`` (meV)."""
-    H, N_op, M_minus = example2_chain(n_sites)
+    """Example 1 chain with collective lowering or local number dephasing at ``rate`` (meV)."""
+    H, N_op, M_minus = example1_chain(n_sites)
     magnons = np.rint(N_op.diag().real).astype(int)
     members = {N: np.flatnonzero(magnons == N) for N in range(5)}
     H_full, M_full = H.full(), M_minus.full()
@@ -71,8 +71,8 @@ def xxz_chain(kind, rate, n_sites=6):
             c_ops.append(({(N, N): op[np.ix_(members[N], members[N])] for N in range(5)}, rate))
         c_ops = tuple(c_ops)
     model = ExcitationSectorModel(hamiltonians, raising, initial_sector=0, c_ops_raw=c_ops, energy_unit="meV")
-    omegas = [float(EX2_AXES["omega_1q"][i]) for i in (5, 20, 40)]
-    return model, example2_context(), omegas, (0.03, 0.003)
+    omegas = [float(EX1_AXES["omega_1q"][i]) for i in (5, 20, 40)]
+    return model, example1_context(), omegas, (0.03, 0.003)
 
 
 def measure(model, context, omegas, eta, preconditioner):

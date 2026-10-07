@@ -20,7 +20,7 @@ def two_level(c_ops, backend="dense"):
 
 
 @pytest.mark.parametrize("backend", ("dense", "sparse_sector"))
-def test_example1_rates(backend):
+def test_quickstart_rates(backend):
     rates = two_level(((L_RAD, GAMMA_1), (SIGMA_Z, GAMMA_PHI / 2)), backend).decay_rates()
     g, e = 0, 1
     assert rates.energies == pytest.approx([0.0, 2.0])
@@ -43,7 +43,7 @@ def test_normalization_of_dephasing_channels():
     assert wrong.coherence_decay[1, 0] == pytest.approx(GAMMA_1 / 2 + 2 * GAMMA_PHI)
 
 
-def test_exact_modes_of_example1():
+def test_exact_modes_of_quickstart():
     rates = two_level(((L_RAD, GAMMA_1), (SIGMA_Z, GAMMA_PHI / 2))).decay_rates(modes=True)
     expected = np.array([0.0, -GAMMA_1, -0.05 + 2.0j, -0.05 - 2.0j])
     for value in expected:

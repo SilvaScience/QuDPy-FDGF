@@ -1,4 +1,4 @@
-"""Action detection with the excitation number reads the coherent signal (Example 4).
+"""Action detection with the excitation number reads the coherent signal (Example 2).
 
 For two coupled, anharmonic and dissipative bosonic modes, the action signal whose detector is the
 excitation number N = n_a + n_b equals -i times the polarization, pathway by pathway and to machine
@@ -7,7 +7,7 @@ fourth interaction. The reason is algebraic: Tr(N [mu_-, rho]) = Tr([N, mu_-] rh
 whatever the dynamics before the readout. A readout alternative alone, or a detector that is not the
 excitation number (a projector on the one-quantum states), does not have this property.
 
-The same relation is shown, with figures, in examples/example4_coupled_modes_detection.ipynb.
+The same relation is shown, with figures, in examples/example2_coupled_modes_detection.ipynb.
 """
 import numpy as np
 import pytest

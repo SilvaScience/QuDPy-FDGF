@@ -1,15 +1,15 @@
-"""Regenerate fig_example2_manifolds_thermal.pdf (Example 2, excitation structure and thermal preparation).
+"""Regenerate fig_example1_manifolds_thermal.pdf (Example 1, excitation structure and thermal preparation).
 
 (a) One-magnon dispersion of the six-site XXZ ring at the allowed momenta; the star marks the
     k = 0 state selected by the uniform THz field.
 (b) One-to-two-magnon transition strengths from that bright state. The bound-bimagnon transition
     carries most of the accessible strength.
-(c) Canonical magnon-sector populations at T = 4 K (read from results/data/example2.npz, saved by
+(c) Canonical magnon-sector populations at T = 4 K (read from results/data/example1.npz, saved by
     the example notebook); the dashed line marks the cutoff N_max = 4.
 
 The Hamiltonian blocks and the uniform raising operator come from models.py.
 
-Usage:  python fig_example2_manifolds_thermal.py
+Usage:  python fig_example1_manifolds_thermal.py
 """
 import sys
 from pathlib import Path
@@ -21,16 +21,16 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from models import DATA, EX2, FIGURES, MU_B_MEV_PER_T, example2_chain, results_dirs
+from models import DATA, EX1, FIGURES, MU_B_MEV_PER_T, example1_chain, results_dirs
 
 results_dirs()
-saved = np.load(DATA / "example2.npz")
+saved = np.load(DATA / "example1.npz")
 n_sites, max_magnons = int(saved["n_sites"]), int(saved["max_magnons"])
 temperature = float(saved["temperature"])
 weights = saved["sector_weight"]
 
 # ------------------------------------------------------------------ blocks of the first sectors
-H, N_op, M_minus = example2_chain(n_sites)
+H, N_op, M_minus = example1_chain(n_sites)
 magnons = np.rint(N_op.diag().real).astype(int)
 members = {N: np.flatnonzero(magnons == N) for N in range(3)}
 H_full, M_full = H.full(), M_minus.full()
@@ -50,7 +50,7 @@ fractions = strengths / strengths.sum()
 bound = int(np.flatnonzero(active)[np.argmin(energies[active])])
 
 k_points = 2 * np.pi * np.arange(n_sites) / n_sites
-dispersion = EX2["g_factor"] * MU_B_MEV_PER_T * EX2["static_field"] - EX2["J_z"] + EX2["J_xy"] * np.cos(k_points)
+dispersion = EX1["g_factor"] * MU_B_MEV_PER_T * EX1["static_field"] - EX1["J_z"] + EX1["J_xy"] * np.cos(k_points)
 print(f"bright k=0 energy {bright_energy:.4f} meV")
 print(f"bound-bimagnon transition {energies[bound]:.4f} meV carries {100 * fractions[bound]:.2f} % of the strength")
 print(f"population beyond N_max = {weights[max_magnons + 1:].sum():.2e}")
@@ -90,6 +90,6 @@ axes[2].legend(frameon=False, fontsize=8)
 for axis, label in zip(axes, ("(a)", "(b)", "(c)")):
     axis.text(-0.14, 1.06, label, transform=axis.transAxes, fontsize=12, fontweight="bold", va="top", ha="left")
 
-fig.savefig(FIGURES / "fig_example2_manifolds_thermal.pdf", bbox_inches="tight")
-fig.savefig(FIGURES / "fig_example2_manifolds_thermal.png", dpi=200, bbox_inches="tight")
-print("saved", FIGURES / "fig_example2_manifolds_thermal.pdf")
+fig.savefig(FIGURES / "fig_example1_manifolds_thermal.pdf", bbox_inches="tight")
+fig.savefig(FIGURES / "fig_example1_manifolds_thermal.png", dpi=200, bbox_inches="tight")
+print("saved", FIGURES / "fig_example1_manifolds_thermal.pdf")

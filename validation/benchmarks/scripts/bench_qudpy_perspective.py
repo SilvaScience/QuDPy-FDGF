@@ -1,4 +1,4 @@
-"""Original QuDPy (public System.coherence2d, QuTiP mesolve) versus QuDPy-FDGF on the two coupled modes of Example 4.
+"""Original QuDPy (public System.coherence2d, QuTiP mesolve) versus QuDPy-FDGF on the two coupled modes of Example 2.
 
 Same output for both codes: the maps of the individual Liouville diagrams on a grid of frequencies,
 (omega_1, omega_3) in [-1.35, -0.90] x [0.90, 1.35] eV,
@@ -88,13 +88,13 @@ def run_fdgf(grid, kind):
     start = time.perf_counter()
     maps = []
     if kind == "coherent":
-        result = solver.generate_spectrum(models.EX4_PROTOCOL, axes, pathways=models.EX4_PATHWAYS,
+        result = solver.generate_spectrum(models.EX2_PROTOCOL, axes, pathways=models.EX2_PATHWAYS,
                                           fixed_coordinates={"t2": T2}, observables=observables)
         maps = [result.observables["polarization"][p] for p in ("R_SE", "R_GSB", "R_ESA")]
     else:                                                  # Q3a, Q4a, Q2b with Bu; Q8b with Kd, only the four maps asked for
-        bu = solver.generate_spectrum(models.EX4_PROTOCOL, axes, pathways=models.EX4_PATHWAYS, fixed_coordinates={"t2": T2},
+        bu = solver.generate_spectrum(models.EX2_PROTOCOL, axes, pathways=models.EX2_PATHWAYS, fixed_coordinates={"t2": T2},
                                       observables={"Bu": observables["Bu"]})
-        kd = solver.generate_spectrum(models.EX4_PROTOCOL, axes, pathways=models.EX4_PATHWAYS[2:], fixed_coordinates={"t2": T2},
+        kd = solver.generate_spectrum(models.EX2_PROTOCOL, axes, pathways=models.EX2_PATHWAYS[2:], fixed_coordinates={"t2": T2},
                                       observables={"Kd": observables["Kd"]})
         maps = [bu.observables["Bu"][p] for p in ("R_SE", "R_GSB", "R_ESA")] + [kd.observables["Kd"]["R_ESA"]]
     elapsed = time.perf_counter() - start
@@ -107,7 +107,7 @@ def run_fdgf(grid, kind):
 
 def quantum_system(kind):
     """The Perspective's system: eigenbasis, annihilation operator mu_- = a + b, detector mu (coherent) or N_exc (action)."""
-    operators = models.example4_operators(**({"k_rad": 0.0} if kind == "coherent" else {}))
+    operators = models.example2_operators(**({"k_rad": 0.0} if kind == "coherent" else {}))
     H = operators["H"]
     levels = 3
     a = qt.tensor(qt.destroy(levels), qt.qeye(levels))

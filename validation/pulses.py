@@ -1,7 +1,7 @@
 """Third-order rephasing signal of a closed system driven by Gaussian pulses of finite duration.
 
 A time-domain calculation, independent of the resolvent formalism of QuDPy-FDGF, used to measure the error of its
-impulsive limit and of the rotating-wave approximation (validation/analysis/example2_pulses.ipynb).
+impulsive limit and of the rotating-wave approximation (validation/analysis/example1_pulses.ipynb).
 
 The system is given in the eigenbasis of H0: the energies, the coupling operator ``mu`` (Hermitian), its raising part
 ``mu_plus`` (the operator that raises the excitation number; the lowering part is its adjoint) and the stationary state
@@ -196,11 +196,11 @@ def chain_system(max_magnons=4, temperature=4.0):
     """Eigenbasis arrays (energies, mu, mu_plus, rho0) of the XXZ ring of Example 1 truncated at ``max_magnons``.
 
     ``mu_plus`` is the uniform magnon-raising operator, ``mu`` = mu_plus + mu_plus^dagger and ``rho0`` the canonical state
-    on the retained sectors, as for the ExcitationSectorModel of models.example2_model.
+    on the retained sectors, as for the ExcitationSectorModel of models.example1_model.
     """
     import models
 
-    H, N_op, M = models.example2_chain()
+    H, N_op, M = models.example1_chain()
     keep = np.flatnonzero(np.rint(N_op.diag().real).astype(int) <= max_magnons)
     H_kept = H.full()[np.ix_(keep, keep)]
     M_kept = M.full()[np.ix_(keep, keep)]

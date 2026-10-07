@@ -1,4 +1,4 @@
-"""GMRES iterations of the sparse backend versus eta, for Example 2 at its published size.
+"""GMRES iterations of the sparse backend versus eta, for Example 1 at its published size.
 
 XXZ chain (L = 6, N_max = 4, D = 57, canonical state at 4 K), rephasing GSB + SE + ESA,
 t2 = 0, 3 x 3 subgrid of the published window, eta from 0.3 to 0.003 meV (production:
@@ -25,7 +25,7 @@ import time
 import numpy as np
 from qudpy_fdgf import SpectroscopySolver
 from qudpy_fdgf.exceptions import ConvergenceError
-from models import EX2, EX2_PATHWAYS, EX2_PROTOCOL, example2_context, example2_model
+from models import EX1, EX1_PATHWAYS, EX1_PROTOCOL, example1_context, example1_model
 
 ETAS = (0.3, 0.1, 0.03, 0.01, 0.003)
 MODE = sys.argv[1] if len(sys.argv) > 1 else "plain"
@@ -40,26 +40,26 @@ AXES = {"omega_1q": np.linspace(-1.55, -0.55, GRID), "omega_emit": np.linspace(0
 
 rows = []
 for eta in ETAS:
-    model, _ = example2_model()
+    model, _ = example1_model()
     reference_file = OUT / f"gmres_eta_dense_{eta}.npy"
     if reference_file.exists():
         ref = np.load(reference_file)
     else:
         dense = SpectroscopySolver(backend="dense", eta=eta, cache_resolvents=False)   # memory
-        dense.feed_model(model, context=example2_context())
-        ref = dense.generate_spectrum(EX2_PROTOCOL, AXES, pathways=EX2_PATHWAYS,
-                                      fixed_coordinates={"t2": EX2["t2"]}).components["rephasing"]
+        dense.feed_model(model, context=example1_context())
+        ref = dense.generate_spectrum(EX1_PROTOCOL, AXES, pathways=EX1_PATHWAYS,
+                                      fixed_coordinates={"t2": EX1["t2"]}).components["rephasing"]
         del dense
         np.save(reference_file, ref)
-    sparse = SpectroscopySolver(backend="sparse_sector", eta=eta, krylov_tolerance=EX2["krylov_tolerance"],
+    sparse = SpectroscopySolver(backend="sparse_sector", eta=eta, krylov_tolerance=EX1["krylov_tolerance"],
                                 **OPTIONS)
-    sparse.feed_model(model, context=example2_context())
+    sparse.feed_model(model, context=example1_context())
     start = time.perf_counter()
     row = {"eta_meV": eta, "D": 57, "grid": [GRID, GRID], "mode": MODE,
            "method": None}
     try:
-        result = sparse.generate_spectrum(EX2_PROTOCOL, AXES, pathways=EX2_PATHWAYS,
-                                          fixed_coordinates={"t2": EX2["t2"]})
+        result = sparse.generate_spectrum(EX1_PROTOCOL, AXES, pathways=EX1_PATHWAYS,
+                                          fixed_coordinates={"t2": EX1["t2"]})
         statistics = result.diagnostics["solver"]
         row.update({"converged": True,
                     "relative_difference_to_dense": float(np.max(abs(result.components["rephasing"] - ref)) / np.max(abs(ref))),

@@ -1,4 +1,4 @@
-"""Regenerate fig_example1_validation.pdf (Example 1, open two-level system).
+"""Regenerate fig_quickstart_validation.pdf (the quickstart, open two-level system).
 
 (a) peak amplitude of R1 (SE), R2 (GSB) and R3 versus t2, in units of the t2 = 0 amplitude of R2,
     and the sum (R1 + R2 + R3) / 2; R3 = (Bu, Ku, Ku) is non-zero only because the radiative channel
@@ -7,7 +7,7 @@
 (c) relative error of (b) at T = 5/gamma_1: legacy trapezoidal option versus n_steps,
     and the default exact (Heisenberg-picture) evaluation.
 
-The model is the one of examples/example1_two_level_open.ipynb (validation/models.py).
+The model is the one of examples/quickstart_two_level_model.ipynb (validation/models.py).
 Labels use gamma_1 = 1/T1 (population decay rate) as in the revised manuscript.
 """
 import sys
@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # validation/ (mo
 from models import FIGURES, DATA as DATA_DIR, results_dirs
 
 results_dirs()
-from models import EX1, example1_model
+from models import QS, quickstart_model
 
 import matplotlib
 matplotlib.use("Agg")
@@ -30,10 +30,10 @@ from qudpy_fdgf.protocols import standard_nq_protocol
 
 OUT = FIGURES
 
-# ------------------------------------------------------------------ model (Example 1, models.py)
-model = example1_model()
-omega_eg, gamma_1, gamma_phi = EX1["omega_eg"], EX1["gamma_1"], EX1["gamma_phi"]
-solver = SpectroscopySolver(backend="dense", eta=EX1["eta"])
+# ------------------------------------------------------------------ model (the quickstart, models.py)
+model = quickstart_model()
+omega_eg, gamma_1, gamma_phi = QS["omega_eg"], QS["gamma_1"], QS["gamma_phi"]
+solver = SpectroscopySolver(backend="dense", eta=QS["eta"])
 solver.feed_model(model)
 radiative = solver.jump_channel_names()[0]
 
@@ -141,6 +141,6 @@ c.set(xlabel=r"$n_{\mathrm{steps}}$", ylabel="relative error", title="(c) window
       ylim=(floor / 10, 1.0))
 c.legend(loc="center right", frameon=False, handlelength=1.5)
 
-fig.savefig(OUT / "fig_example1_validation.pdf")
-fig.savefig(OUT / "fig_example1_validation.png", dpi=200)
-print("saved", OUT / "fig_example1_validation.pdf")
+fig.savefig(OUT / "fig_quickstart_validation.pdf")
+fig.savefig(OUT / "fig_quickstart_validation.png", dpi=200)
+print("saved", OUT / "fig_quickstart_validation.pdf")

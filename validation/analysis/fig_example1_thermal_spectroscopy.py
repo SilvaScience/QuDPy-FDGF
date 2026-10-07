@@ -1,4 +1,4 @@
-"""Regenerate fig_example2_thermal_spectroscopy.pdf (Example 2, thermal XXZ chain).
+"""Regenerate fig_example1_thermal_spectroscopy.pdf (Example 1, thermal XXZ chain).
 
 Complete third-order rephasing response of the six-site XXZ chain at 4 K: the eight
 instruction sequences with coherence orders q = (-1, 0, +1). Three of them (GSB, SE, ESA)
@@ -15,7 +15,7 @@ end with two bra lowerings and contribute only from thermally populated sectors.
 Model and grids are those of the manuscript (N_max = 4, D = 57, eta = 0.03 meV, 60 x 60
 grid, t2 = 0). The sparse backend uses the diagonal preconditioner, which is exact for this
 closed model in its eigenbasis (one GMRES iteration per resolvent). Spectra are stored in
-results/data/fig_example2_thermal_spectroscopy.npz; ``python fig_example2_thermal_spectroscopy.py
+results/data/fig_example1_thermal_spectroscopy.npz; ``python fig_example1_thermal_spectroscopy.py
 plot`` redraws the figure from that file.
 """
 import sys
@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # validation/ (mo
 from models import FIGURES, DATA as DATA_DIR, results_dirs
 
 results_dirs()
-from models import BOLTZMANN_MEV_PER_K, EX2, example2_model
+from models import BOLTZMANN_MEV_PER_K, EX1, example1_model
 
 import matplotlib
 matplotlib.use("Agg")
@@ -41,13 +41,13 @@ from qudpy_fdgf import (FrequencyPathway, SpectroscopySolver,
                         ThermodynamicContext, standard_nq_protocol)
 
 OUT = FIGURES
-DATA = DATA_DIR / "fig_example2_thermal_spectroscopy.npz"
+DATA = DATA_DIR / "fig_example1_thermal_spectroscopy.npz"
 
-# ------------------------------------------------------------------ model (Example 2, models.py)
-n_sites, max_magnons = EX2["n_sites"], EX2["max_magnons"]
-temperature, eta = EX2["temperature"], EX2["eta"]                  # K, meV
+# ------------------------------------------------------------------ model (Example 1, models.py)
+n_sites, max_magnons = EX1["n_sites"], EX1["max_magnons"]
+temperature, eta = EX1["temperature"], EX1["eta"]                  # K, meV
 K_B = BOLTZMANN_MEV_PER_K
-model, hamiltonians = example2_model()
+model, hamiltonians = example1_model()
 
 energies = {N: np.linalg.eigvalsh(H) for N, H in hamiltonians.items()}
 bright = energies[1].min()                                   # k = 0 magnon, 1.1224 meV
@@ -162,6 +162,6 @@ ax.legend(fontsize=8)
 for ax, text in zip(axes.flat, "abcd"):
     label(ax, f"({text})")
 
-fig.savefig(OUT / "fig_example2_thermal_spectroscopy.pdf")
-fig.savefig(OUT / "fig_example2_thermal_spectroscopy.png", dpi=200)
-print("saved", OUT / "fig_example2_thermal_spectroscopy.pdf")
+fig.savefig(OUT / "fig_example1_thermal_spectroscopy.pdf")
+fig.savefig(OUT / "fig_example1_thermal_spectroscopy.png", dpi=200)
+print("saved", OUT / "fig_example1_thermal_spectroscopy.pdf")

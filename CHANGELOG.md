@@ -32,6 +32,21 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
   `ValueError` at `feed_model` instead of silently using eV/K; zero temperature needs neither.
   A model that ran in eV with a thermal state must now say `energy_unit="eV"`.
 
+### Examples and validation renumbered (as in the article)
+- The examples follow the numbering of the article: `examples/quickstart_two_level_model.ipynb` (was
+  `example1_two_level_open.ipynb`, the tutorial of Sec. 4), `examples/example1_xxz_chain_thermal.ipynb` (was
+  `example2_xxz_chain_thermal.ipynb`) and `examples/example2_coupled_modes_detection.ipynb` (was
+  `example4_coupled_modes_detection.ipynb`). The same renaming applies to the files of `validation/` (analysis
+  and benchmark notebooks and scripts, results, figures) and to the constants and functions of
+  `validation/models.py`: `QS`/`quickstart_model` (was `EX1`/`example1_model`), `EX1`/`example1_*` (was `EX2`/`example2_*`,
+  the XXZ chain), `EX2`/`example2_*` and `EX2_CHI5_*` (was `EX4`/`example4_*`, the coupled modes and their closed limit).
+- The former Example 3 (fifth-order response of two coupled anharmonic bosonic modes) leaves the examples:
+  its notebook is in `examples/old_scripts/`, and its analysis, benchmark, results and model (`models_example3.py`),
+  together with the comparison of the original QuDPy with the open two-level system and its time-domain benchmark,
+  are in `validation/old_files/` (see its README). The fifth-order response is now that of the closed limit of
+  Example 2 (`validation/analysis/example2_chi5_analysis.ipynb`).
+- `README.md`: the test suite has 246 tests (249 with the local `tests/consistency/` folder) and takes about 30 s.
+
 ### Changed
 - Exact diagonal solve (`SparseSectorBackend(diagonal_solve=True)`, default). When the generator is exactly
   diagonal in the dyad basis (diagonal Hamiltonian blocks, collapse operators that are diagonal blocks: a closed
