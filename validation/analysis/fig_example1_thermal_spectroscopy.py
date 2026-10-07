@@ -9,7 +9,8 @@ end with two bra lowerings and contribute only from thermally populated sectors.
     polarized ground state, so this is exactly the contribution of the initial sectors N >= 1;
 (b) ESA pathway at 4 K;
 (c) complete rephasing response at 4 K;
-(d) emission cut at the bright excitation pole: GSB + SE, ESA, the complete response at 4 K,
+(d) emission cut at the bright excitation pole, with its sign (the real part of i S, the display
+    convention of the article): GSB + SE (positive), ESA (negative), the complete response at 4 K,
     and the complete response of the pure ground state.
 
 Model and grids are those of the manuscript (N_max = 4, D = 57, eta = 0.03 meV, 60 x 60
@@ -149,15 +150,21 @@ map_panel(axes[1, 0], total_T, "Total rephasing response", r"$|S_{\mathrm{R}}|$"
 
 cut = np.argmin(np.abs(w1 + bright))
 ax = axes[1, 1]
-ax.plot(w3, np.abs(thermal["GSB"][cut] + thermal["SE"][cut]), label="GSB + SE")
-ax.plot(w3, np.abs(thermal["ESA"][cut]), label="ESA")
-ax.plot(w3, np.abs(total_T[cut]), "k", lw=2, label=f"total, {temperature:.0f} K")
-ax.plot(w3, np.abs(total_0[cut]), "k--", lw=1, label="total, 0 K")
+def displayed(values):
+    """Display convention of the article, detection_phase = pi / 2: the real part of i S (GSB and SE positive, ESA negative)."""
+    return (1j * values).real
+
+
+ax.plot(w3, displayed(thermal["GSB"][cut] + thermal["SE"][cut]), label="GSB + SE")
+ax.plot(w3, displayed(thermal["ESA"][cut]), label="ESA")
+ax.plot(w3, displayed(total_T[cut]), "k", lw=2, label=f"total, {temperature:.0f} K")
+ax.plot(w3, displayed(total_0[cut]), "k--", lw=1, label="total, 0 K")
+ax.axhline(0.0, color="0.6", lw=0.6)
 ax.axvline(bright, color="0.4", ls="--", lw=0.8)
 ax.axvline(bimagnon, color="C3", ls=":", lw=0.8)
 ax.set_title(rf"Cut at $\omega_{{1Q}}={w1[cut]:.3f}$ meV")
 ax.set_xlabel(r"Emission energy $\omega_{\mathrm{emit}}$ (meV)")
-ax.set_ylabel("Absolute response (solver units)")
+ax.set_ylabel(r"$\mathrm{Re}(iS_{\mathrm{R}})$ (solver units)")
 ax.legend(fontsize=8)
 for ax, text in zip(axes.flat, "abcd"):
     label(ax, f"({text})")

@@ -5,13 +5,16 @@ magnon by the uniform probe, the lowest level (2.1108 meV) has a high probabilit
 (0.67, against 0.4 for uncorrelated magnons) and lies 0.447 meV below the first scattering level (2.5583 meV) of the same
 sector, 0.434 meV below the free pair 2 omega(2 pi / L). The distance to 2 omega(0), -0.134 meV, is not a binding energy:
 two magnons cannot both be at k = 0. It is the displacement of the excited-state-absorption line from the bright line,
-which the third-order spectrum shows.
+which the third-order spectrum shows. In the display convention of the article (the real part of i S), the bleach and the
+stimulated emission are positive and the excited-state absorption, which ends on that bimagnon line, is negative.
 
 Built with NumPy only (Pauli matrices); the same numbers, with QuTiP, are in examples/example1_xxz_chain_thermal.ipynb.
 """
 from math import comb
 
 import numpy as np
+
+from qudpy_fdgf import ExcitationSectorModel, FrequencyPathway, SpectroscopySolver, standard_nq_protocol
 
 L = 6
 J_XY, J_Z, G, MU_B, FIELD = -0.30, -0.55, 2.10, 0.0578838, 7.1773
@@ -79,3 +82,35 @@ def test_binding_energy_is_taken_in_the_sector_of_the_bright_state():
 def test_the_lowest_two_magnon_level_has_zero_momentum():
     lowest = {m: sector_levels(m)[0][0] for m in range(L)}
     assert min(lowest, key=lowest.get) == 0
+
+
+def test_excited_state_absorption_has_the_sign_opposite_to_bleach_and_emission():
+    """At the excitation pole of the bright magnon, Re(i S) is +1/eta^2 for the bleach and the emission (exactly: the matrix
+    element of the uniform probe from the polarized state is 1) and negative for the absorption of the bimagnon line."""
+    eta = 0.03
+    H, magnons, _ = ring()
+    members = {N: np.flatnonzero(magnons == N) for N in range(3)}
+    lowering = np.array([[0, 0], [1, 0]], dtype=complex)                         # S^- on one site
+    M = np.zeros((2**L, 2**L), dtype=complex)
+    for j in range(L):
+        operator = np.eye(1)
+        for k in range(L):
+            operator = np.kron(operator, lowering if k == j else np.eye(2))
+        M += operator / np.sqrt(L)
+    model = ExcitationSectorModel({N: H[np.ix_(i, i)] for N, i in members.items()},
+                                  {(N + 1, N): M[np.ix_(members[N + 1], members[N])] for N in range(2)}, initial_sector=0)
+    solver = SpectroscopySolver(backend="dense", eta=eta)
+    solver.feed_model(model)
+    bright = omega_one(0.0)
+    bimagnon = sector_levels(0)[0][0] - bright
+    sequences = {"GSB": ("Bu", "Bd", "Ku"), "SE": ("Bu", "Ku", "Bd"), "ESA": ("Bu", "Ku", "Ku")}
+    pathways = [FrequencyPathway(name=name, interactions=labels, component="rephasing") for name, labels in sequences.items()]
+    protocol = standard_nq_protocol(order=1, nq_interval=1, detection_interval=3, n_interactions=3,
+                                    nq_axis="omega_1q", detection_axis="omega_emit")
+    result = solver.generate_spectrum(protocol, {"omega_1q": np.array([-bright]), "omega_emit": np.array([bright, bimagnon])},
+                                      pathways=pathways, fixed_coordinates={"t2": 0.0})
+    shown = {name: (1j * np.asarray(result.pathways[name])).real.ravel() for name in sequences}       # [bright, bimagnon]
+    np.testing.assert_allclose(shown["GSB"][0], 1 / eta**2, rtol=1e-6)
+    np.testing.assert_allclose(shown["SE"][0], shown["GSB"][0], rtol=1e-9)
+    assert shown["ESA"][1] < 0
+    assert 1.4 < -shown["ESA"][1] / shown["GSB"][0] < 1.7                           # (2 - 2/L) times the share of the bimagnon
