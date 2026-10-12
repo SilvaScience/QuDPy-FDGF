@@ -1,11 +1,15 @@
 # Changelog
 
 Changes to the code of QuDPy-FDGF, newest first. The article and the API reference manual
-(`docs/`) are updated with each entry.
+(`docs/`) are updated with each entry. Releases are numbered major.minor.patch, starting from 1.0.0;
+the compatibility and deprecation policy is the section "Versions and compatibility" of the manual.
 
 ## Unreleased
 
 ### Breaking changes
+- Minimum versions raised to the tested ones: Python >= 3.13, NumPy >= 2.5, SciPy >= 1.18, Matplotlib >= 3.11 (they were
+  3.10, 1.24, 1.10 and 3.7, never tested; `gmres(rtol=...)` needs SciPy >= 1.12 and `np.trapezoid` NumPy >= 2.0). The optional
+  extras carry the tested lower bounds as well. Tested on Windows 11 only.
 - `eta` has no default: `SpectroscopySolver(...)`, `DenseLiouvilleBackend` and `SparseSectorBackend`
   raise a `ValueError` that explains the parameter when it is missing (the former `0.05` has no
   meaning without a unit). Negative, infinite and NaN values are rejected.
@@ -48,6 +52,9 @@ Changes to the code of QuDPy-FDGF, newest first. The article and the API referen
 - `README.md`: the test suite has 247 tests (250 with the local `tests/consistency/` folder) and takes about 30 s.
 
 ### Changed
+- Documentation: the stationarity residual `||L rho|| / ||rho||` is documented as it is, a quantity with the dimension of a
+  rate compared with an absolute tolerance in the unit of the Hamiltonian (README, manual, article). Planned for the next major
+  release: a dimensionless residual `||L rho|| / (||L|| ||rho||)`.
 - Exact diagonal solve (`SparseSectorBackend(diagonal_solve=True)`, default). When the generator is exactly
   diagonal in the dyad basis (diagonal Hamiltonian blocks, collapse operators that are diagonal blocks: a closed
   model in its eigenbasis, pure dephasing), every shifted system is solved by the element-wise division

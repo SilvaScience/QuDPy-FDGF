@@ -6,8 +6,17 @@
 \usepackage{amssymb}
 \usepackage{physics}
 \newcommand{\kket}[1]{|#1\rangle\!\rangle}
+%% Pointers to the article (companion manuscript). The numbers are written here only. This file is also
+%% compiled alone in the code repository, so it does not read the aux file of the article: when the
+%% article is renumbered, edit this block and nothing else.
+\newcommand{\ArtSecUsage}{4}           % Program usage
+\newcommand{\ArtSecResolvent}{2.4}     % propagator and resolvent
+\newcommand{\ArtSecScope}{2.10}        % scope and approximations (phase covariance)
+\newcommand{\ArtSecPerformance}{6}     % validation and performance
+\newcommand{\ArtSISecScaling}{S5}      % Supplementary Material: cost versus Hilbert-space dimension
 \usepackage{bbold}
 \usepackage{booktabs}
+\usepackage{underscore}   % \_ in \texttt{} (file and code names) may be broken at line ends
 \usepackage[hidelinks]{hyperref}
 
 \title{QuDPy-FDGF Solver API and Implementation Reference}
@@ -35,7 +44,7 @@ The notation follows the companion manuscript. Operators on the Hilbert space ca
 \label{sec:quick-start}
 
 \subsection{Installation}
-QuDPy-FDGF requires Python~$\geq 3.10$. The distribution is named \texttt{qudpy-fdgf} and the import name is \texttt{qudpy\_fdgf}. From a clone of the repository, install it in editable mode:
+QuDPy-FDGF requires Python~$\geq 3.13$. The distribution is named \texttt{qudpy-fdgf} and the import name is \texttt{qudpy\_fdgf}. From a clone of the repository, install it in editable mode:
 \begin{verbatim}
 git clone https://github.com/SilvaScience/QuDPy-FDGF.git
 cd QuDPy-FDGF
@@ -43,7 +52,7 @@ pip install -e .              # core: NumPy, SciPy, Matplotlib
 pip install -e ".[examples]"  # optional: QuTiP, UFSS, IPython (notebooks)
 pip install -e ".[dev]"       # optional: pytest
 \end{verbatim}
-The core dependencies are NumPy~$\geq 1.24$, SciPy~$\geq 1.10$, and Matplotlib~$\geq 3.7$; Matplotlib is used only by \texttt{SpectroscopyPlotter}. QuTiP is used by the example notebooks to build operators, and \texttt{ufss.DiagramGenerator} generates the fifth-order pathways of the closed limit of Example~2. The optional extra \texttt{[manybody]} installs TeNPy for the experimental modules, which are not part of this release. The reference output below was obtained with Python~3.13.14, NumPy~2.5.0, SciPy~1.18.0, and Matplotlib~3.11.0.
+The core dependencies are NumPy~$\geq 2.5$, SciPy~$\geq 1.18$, and Matplotlib~$\geq 3.11$, the versions with which the test suite was run; Matplotlib is used only by \texttt{SpectroscopyPlotter}. QuTiP is used by the example notebooks to build operators, and \texttt{ufss.DiagramGenerator} generates the fifth-order pathways of the closed limit of Example~2. The optional extra \texttt{[manybody]} installs TeNPy for the experimental modules, which are not part of this release. The reference output below was obtained with Python~3.13.14, NumPy~2.5.0, SciPy~1.18.0, and Matplotlib~3.11.0 on Windows~11; other platforms were not tested.
 
 \subsection{A complete calculation}
 The script below treats an open two-level system with transition energy $2~\mathrm{eV}$, radiative decay at rate $\gamma_1$, and pure dephasing at rate $\gamma_\phi$. It performs the five steps common to every calculation: build the matrices, adapt them to the model contract, feed the model to the solver, declare the pathways and the protocol, and generate the spectrum.
@@ -121,7 +130,7 @@ Each numerical line is followed by its analytical value. The absorptive line has
 \subsection{Next steps and tests}
 \begin{itemize}
 \item \texttt{examples/quickstart.py}: the listing above.
-\item \texttt{examples/quickstart\_two\_level\_model.ipynb}: the tutorial of the manuscript (Sec.~4), with populations, action detection, and integrated jump observables (Sec.~\ref{sec:observables}); the listing of the manuscript is extracted from its cells tagged \texttt{listing}.
+\item \texttt{examples/quickstart\_two\_level\_model.ipynb}: the tutorial of the manuscript (Sec.~\ArtSecUsage), with populations, action detection, and integrated jump observables (Sec.~\ref{sec:observables}); the listing of the manuscript is extracted from its cells tagged \texttt{listing}.
 \item \texttt{examples/example1\_xxz\_chain\_thermal.ipynb} and \texttt{examples/example2\_coupled\_modes\_detection.ipynb}: Examples~1 and~2 of the manuscript.
 \item \texttt{python -m pytest}: runs the test suite in \texttt{tests/}, including the analytical checks of the manuscript (about 30~s with a single BLAS thread, \texttt{OMP\_NUM\_THREADS=1}); \texttt{tests/api/} checks the contracts and options of the library, \texttt{tests/physics/} the closed-form results and limiting cases, and \texttt{tests/regression/} compares eight small calculations with stored outputs, which any change of the numerical core must reproduce.
 \item \texttt{validation/}: analysis notebooks (convergence, analytical limits, backend agreement), benchmark notebooks and scripts (time, memory, comparison with the original QuDPy), the scripts that redraw the figures of the manuscript, the shared models, and the stored results (see \texttt{validation/README.md}).
@@ -384,7 +393,7 @@ Both adapters take \texttt{energy\_unit=None} and \texttt{boltzmann\_constant=No
 \bottomrule
 \end{tabular}
 \end{center}
-(CODATA 2018.) \texttt{"THz"} is the ordinary frequency $\nu=E/h$, so $k_B/h=0.0208\,\mathrm{THz/K}$; a Hamiltonian in angular frequency (rad/ps) needs $k_B/\hbar=0.1309\,\mathrm{rad\,ps^{-1}/K}$ and is passed through \texttt{boltzmann\_constant}. Giving both arguments, an unknown unit or a non-positive, infinite or NaN constant raises \texttt{ValueError}. With neither, a temperature of zero is accepted, since no $k_B$ enters, and a temperature above zero raises a \texttt{ValueError} that lists the options when the model is registered with \texttt{feed\_model}. A model written by the user supplies its own thermal state and is not affected.
+(CODATA 2018.) \texttt{"THz"} is the ordinary frequency $\nu=E/h$, so $k_B/h=0.0208\,\mathrm{THz/K}$; a Hamiltonian in angular frequency (rad/ps) needs $k_B/\hbar=0.1309\,\mathrm{rad\,ps^{-1}/K}$ and is passed through \texttt{boltzmann\_constant}. The solver propagates with $\exp(-i\hat Ht)$ for $\hat H$ as supplied, so that the unit of time is the inverse of the unit of the Hamiltonian, whatever its meaning; for \texttt{energy\_unit="THz"}, where $\hat H$ is $E/h$, one unit of time is $1/(2\pi\,\mathrm{THz})\simeq0.159$~ps, not $1$~ps. Giving both arguments, an unknown unit or a non-positive, infinite or NaN constant raises \texttt{ValueError}. With neither, a temperature of zero is accepted, since no $k_B$ enters, and a temperature above zero raises a \texttt{ValueError} that lists the options when the model is registered with \texttt{feed\_model}. A model written by the user supplies its own thermal state and is not affected.
 
 
 
@@ -410,7 +419,7 @@ SpectroscopySolver(
     **backend_options
 )
 \end{verbatim}
-The broadening \texttt{eta} is required and has no default. It is the regularization of the frequency-domain resolvents $[(\eta-i\omega)\mathbb{1}-\mathcal{L}]^{-1}$ (Sec.~2.4 of the article): it keeps the shifted systems away from the poles of $\mathcal{L}$ and, as a consequence, adds a Lorentzian half width $\eta$ to every line (a line of decay rate $\Gamma$ becomes a Lorentzian of half width $\Gamma+\eta$). It is expressed in the unit of the Hamiltonian, so that no number is reasonable for every model. A missing \texttt{eta}, or a negative, infinite or NaN one, raises \texttt{ValueError}, from the solver and from the backends alike. The arguments \texttt{check\_stationarity} and \texttt{stationarity\_tolerance} control the check of the reference state described below.
+The broadening \texttt{eta} is required and has no default. It is the regularization of the frequency-domain resolvents $[(\eta-i\omega)\mathbb{1}-\mathcal{L}]^{-1}$ (Sec.~\ArtSecResolvent{} of the article): it keeps the shifted systems away from the poles of $\mathcal{L}$ and, as a consequence, adds a Lorentzian half width $\eta$ to every line (a line of decay rate $\Gamma$ becomes a Lorentzian of half width $\Gamma+\eta$). It is expressed in the unit of the Hamiltonian, so that no number is reasonable for every model. A missing \texttt{eta}, or a negative, infinite or NaN one, raises \texttt{ValueError}, from the solver and from the backends alike. The arguments \texttt{check\_stationarity} and \texttt{stationarity\_tolerance} control the check of the reference state described below.
 
 When \texttt{backend="auto"} is selected, the solver compares the effective model requirements with the declared capabilities of the registered backends. Built-in and custom backends are listed by \texttt{available\_backends()} and custom implementations are added with \texttt{register\_backend(name, backend\_class)}.
 
@@ -443,7 +452,7 @@ The perturbative response of the manuscript starts from a reference state $\hat\
 \begin{equation}
     r=\frac{\lVert\mathcal{L}\kket{\hat\rho_{\mathrm{ref}}}\rVert}{\lVert\kket{\hat\rho_{\mathrm{ref}}}\rVert},
 \end{equation}
-with Frobenius norms and in the units of the Hamiltonian and of the rates. The constructor argument \texttt{check\_stationarity} selects the behavior when $r$ exceeds \texttt{stationarity\_tolerance} (default $10^{-8}$): \texttt{"warn"} (default) emits a \texttt{StationarityWarning}, \texttt{"error"} raises \texttt{StationarityError}, and \texttt{"off"} skips the check. The method \texttt{stationarity\_residual()} returns $r$ at any time, and \texttt{summary()} reports it. For example, an open two-level system at $10~\mathrm{K}$ with the channel $\hat L=\ket{g}\bra{e}$ has a Gibbs state with $9\%$ of excited population that the channel empties: $r=0.03$, and the linear response at resonance is $9\%$ below that of the stationary state, which is the ground state. The check does not construct a stationary state; a state that fails it is replaced by the stationary state of the generator (Sec.~\ref{sec:steady-state}), computed by \texttt{steady\_state()} and imposed with \texttt{feed\_model(model, initial\_state="steady")}.
+with Frobenius norms and in the units of the Hamiltonian and of the rates: it has the dimension of a rate, so that the default tolerance is absolute, in the unit of $\hat H$. The check is therefore unit dependent: for an open two-level system whose upward rate departs from detailed balance by a relative $10^{-6}$, the residual is $2.6\times10^{-10}$, $2.6\times10^{-7}$ and $2.6\times10^{-4}$ when the model is written in eV, meV and $\mu$eV; set \texttt{stationarity\_tolerance} accordingly. The tolerance \texttt{rwa\_tol} of the transition decomposition is absolute in the same way. The constructor argument \texttt{check\_stationarity} selects the behavior when $r$ exceeds \texttt{stationarity\_tolerance} (default $10^{-8}$): \texttt{"warn"} (default) emits a \texttt{StationarityWarning}, \texttt{"error"} raises \texttt{StationarityError}, and \texttt{"off"} skips the check. The method \texttt{stationarity\_residual()} returns $r$ at any time, and \texttt{summary()} reports it. For example, an open two-level system at $10~\mathrm{K}$ with the channel $\hat L=\ket{g}\bra{e}$ has a Gibbs state with $9\%$ of excited population that the channel empties: $r=0.03$, and the single pathway $K_u$ of the Quick start, which starts from the ground population, is $9\%$ below its value for the stationary state, which is the ground state (the complete linear response, $K_u$ from the ground population and $B_d$ from the excited one, is proportional to $p_g-p_e$ and is $18\%$ below). The check does not construct a stationary state; a state that fails it is replaced by the stationary state of the generator (Sec.~\ref{sec:steady-state}), computed by \texttt{steady\_state()} and imposed with \texttt{feed\_model(model, initial\_state="steady")}.
 
 \subsubsection{Stationary state of the generator}
 \label{sec:steady-state}
@@ -464,7 +473,7 @@ The state depends only on the generator, not on the reference state of the model
 
 \paragraph{Uniqueness.} If the kernel of $\mathcal{L}$ has dimension above one (a closed model, conserved quantities, a level or sector without relaxation, dark states of a collective decay), there is no stationary state but a family, and what the solver returns is one element of it, without physical meaning; a \texttt{SteadyStateWarning} says so. The dense backend detects it for free: the reciprocal condition number $\rho$ of the LU gives the error estimate $\epsilon/\rho$, and the kernel is declared degenerate (\texttt{unique=False}, minimum-norm solution) above $10^{-6}$. The sparse backend does not test it by default (\texttt{unique=None}), because the test is as stiff as the generator: with \texttt{check\_unique=True} it solves a second system with a random $\hat r$, which for a degenerate kernel gives another element (GMRES returns the projection of $\hat r$ on the kernel); the solve is limited to 2000 iterations and leaves \texttt{unique=None} if it has not converged, as it does for a stiff unique generator from $D_{\mathrm H}\gtrsim30$ with a rate 1/1000 of the energy scale. For a small model, the dense backend is the tool to ask whether the stationary state is unique. For a closed model the maximally mixed state is returned with a warning (it is stationary, as is any state diagonal in the eigenbasis).
 
-\paragraph{Imposing a reference state.} \texttt{feed\_model(model, *, context=None, initial\_state=None)} accepts a \texttt{DensityState} or a \texttt{PureState} for \texttt{initial\_state}, or the string \texttt{"steady"}, which computes the stationary state of the generator and takes it. The state replaces the one the model would supply (its \texttt{equilibrium\_state(context)} or \texttt{initial\_condition}, which are then not called, so that a thermal context without \texttt{energy\_unit} is not an error); \texttt{context} is still given to the model for its collapse channels. A \texttt{DensityState} is validated like any reference state (Hermitian, unit trace, positive); another type raises \texttt{TypeError}. The stationarity check then runs as usual and passes, $r$ being of the order of the residual of the solve. For the two-level system of the example above, imposing the stationary state removes the 9\% of excited population: the linear response at resonance equals that of the ground state, and for channels that satisfy detailed balance (rates $\gamma_\downarrow$ and $\gamma_\uparrow=\gamma_\downarrow e^{-\hbar\omega/k_BT}$) the stationary state is the Gibbs state, which \texttt{steady\_state} reproduces to $10^{-10}$. With rates $\gamma_\downarrow$ and $\gamma_\uparrow$ that do not, the excited population is $\gamma_\uparrow/(\gamma_\uparrow+\gamma_\downarrow)$ and the linear response scales with the ground population $\gamma_\downarrow/(\gamma_\uparrow+\gamma_\downarrow)$.
+\paragraph{Imposing a reference state.} \texttt{feed\_model(model, *, context=None, initial\_state=None)} accepts a \texttt{DensityState} or a \texttt{PureState} for \texttt{initial\_state}, or the string \texttt{"steady"}, which computes the stationary state of the generator and takes it. The state replaces the one the model would supply (its \texttt{equilibrium\_state(context)} or \texttt{initial\_condition}, which are then not called, so that a thermal context without \texttt{energy\_unit} is not an error); \texttt{context} is still given to the model for its collapse channels. A \texttt{DensityState} is validated like any reference state (Hermitian, unit trace, positive); another type raises \texttt{TypeError}. The stationarity check then runs as usual and passes, $r$ being of the order of the residual of the solve. For the two-level system of the example above, imposing the stationary state removes the 9\% of excited population: the linear response at resonance equals that of the ground state, and for channels that satisfy detailed balance (rates $\gamma_\downarrow$ and $\gamma_\uparrow=\gamma_\downarrow e^{-\hbar\omega/k_BT}$) the stationary state is the Gibbs state, which \texttt{steady\_state} reproduces to $10^{-10}$. With rates $\gamma_\downarrow$ and $\gamma_\uparrow$ that do not, the excited population is $\gamma_\uparrow/(\gamma_\uparrow+\gamma_\downarrow)$ and the $K_u$ pathway scales with the ground population $\gamma_\downarrow/(\gamma_\uparrow+\gamma_\downarrow)$, the complete linear response with $p_g-p_e=(\gamma_\downarrow-\gamma_\uparrow)/(\gamma_\uparrow+\gamma_\downarrow)$.
 
 
 
@@ -481,7 +490,7 @@ The method \texttt{pathway\_summary()} returns serializable pathway metadata wit
 
 \subsubsection{Propagation protocols}
 
-A \texttt{SpectroscopyProtocol} is an ordered tuple of \texttt{PropagationInterval} objects. Each interval has a unique name, a domain in \texttt{"time"}, \texttt{"frequency"}, or \texttt{"identity"}, an optional coherence order, an optional interval-specific broadening \texttt{eta}, and a flag \texttt{signed}. By default the protocol checks the modulus of the coherence order of a pathway at an interval ($+NQ$ and $-NQ$ are both accepted); with \texttt{signed=True} it checks the sign as well. The protocol validates pathway length, coherence-order magnitude, and coordinates. It separately exposes all coordinate names and its frequency- and time-axis names.
+A \texttt{SpectroscopyProtocol} is an ordered tuple of \texttt{PropagationInterval} objects. Each interval has a unique name, a domain in \texttt{"time"}, \texttt{"frequency"}, or \texttt{"identity"}, an optional coherence order, an optional interval-specific broadening \texttt{eta}, and a flag \texttt{signed}. By default the protocol checks the modulus of the coherence order of a pathway at an interval ($+NQ$ and $-NQ$ are both accepted); with \texttt{signed=True} it checks the sign as well (the check is on the labels of the pathway, not on the propagated state). The protocol validates pathway length, coherence-order magnitude, and coordinates. It separately exposes all coordinate names and its frequency- and time-axis names.
 
 The helper
 \begin{verbatim}
@@ -581,7 +590,7 @@ fixed_coordinates = {
     "t2": waiting_time,
 }
 \end{verbatim}
-The resulting array shape follows the insertion order of \texttt{axes}. The returned \texttt{SpectrumResult} contains
+The resulting array shape follows the insertion order of \texttt{axes}; \texttt{axis\_names} and \texttt{axis\_values} follow the same order, which need not be that of the intervals of the protocol. The returned \texttt{SpectrumResult} contains
 \begin{itemize}
     \item \texttt{axis\_names}, \texttt{axis\_values}, and \texttt{fixed\_coordinates};
     \item \texttt{pathways[name]} and component sums in \texttt{components[name]};
@@ -619,7 +628,7 @@ A pathway response is the functional $\langle\!\langle d|\,\mathcal{O}_K\cdots\m
 
 The two strategies give the same numbers up to the accuracy of the linear solves: about $10^{-15}$ of the largest value on the dense backend and the GMRES tolerance (\texttt{krylov\_tolerance}, $10^{-10}$ by default) on the sparse backend. The pointwise evaluation is kept for validation and for the cases in which the factorized one does not apply: a single scanned axis, and the \texttt{SparseSectorBackend} for a closed model with a pure state and time intervals only, which is evaluated as a rank-one dyad of two Hilbert-space vectors, cheaper than any Liouville vector. Requesting \texttt{"factorized"} when it does not apply raises \texttt{ValueError}.
 
-The factorized evaluation stores the vectors of the side with fewer vectors for the whole grid (at most $N$ vectors of $D_{\mathrm L}=D_{\mathrm H}^2$ complex entries for each distinct chain) and streams the other side in slabs of its first axis. \texttt{memory\_limit\_mb} bounds the vectors in memory, the slab size being reduced until they fit; the number of solves does not change. If even one slab does not fit, \texttt{"auto"} falls back to the pointwise evaluation, and \texttt{"factorized"} proceeds with slabs of one index.
+The factorized evaluation stores the vectors of the side with fewer vectors for the whole grid (at most $N$ vectors of $D_{\mathrm L}=D_{\mathrm H}^2$ complex entries for each distinct chain) and streams the other side in slabs of its first axis. \texttt{memory\_limit\_mb} bounds the Liouville vectors held by the factorized evaluation (the stored side and the streamed vectors of one slab), not the memory of the process: the model, the Krylov bases and the diagnostics come in addition, and a single slab may exceed it. The slab size is reduced until the vectors fit. With one slab the number of solves is that of the unslabbed evaluation; with several slabs the chains of the streamed side are rebuilt for each slab and the number of solves grows (486 instead of 18 in the example of Sec.~\ArtSISecScaling{} of the Supplementary Material of the article). If even one slab does not fit, \texttt{"auto"} falls back to the pointwise evaluation, and \texttt{"factorized"} proceeds with slabs of one index.
 
 The diagnostics of the result report what was done:
 \begin{itemize}
@@ -628,7 +637,7 @@ The diagnostics of the result report what was done:
     \item \texttt{"resolvent\_factorizations"}: dense matrices factorized or inverted (dense backend; the factorized evaluation factorizes each shifted matrix once for all its vectors and does not keep the inverse);
     \item \texttt{"propagations"}: time propagators applied to a vector, cache hits excluded;
     \item \texttt{"maximum\_resolvent\_residual"}: largest absolute residual of the GMRES solves (sparse backend);
-    \item \texttt{"solver"}: iterations, residuals and conditioning of the linear solves (Sec.~\ref{sec:solve-accuracy});
+    \item \texttt{"solver"}: iterations, residuals and a conditioning indicator of the linear solves (Sec.~\ref{sec:solve-accuracy});
     \item \texttt{"factorization"} (factorized evaluation only): the cut, the axes of each side, the side that is stored, the number of vectors stored, the number of slabs and the number of detection vectors.
 \end{itemize}
 In the pointwise evaluation \texttt{diagnostics["pathways"][name]} holds one record per grid point; in the factorized evaluation it is empty. The counters can be read at any time with \texttt{solver.backend.counters()} and reset with \texttt{reset\_counters()}.
@@ -982,7 +991,7 @@ The residual is the true one, not the preconditioned one on which GMRES stops, a
 \begin{equation}
     \kappa(S)\leq\frac{\eta+|\omega|+\|\mathcal{L}\|}{\eta}\simeq\frac{\|\mathcal{L}\|}{\eta},
 \end{equation}
-whatever the dimension. For a dissipative generator the same resolvent has norm at most $1/\eta$ in the trace norm, because $\exp(\mathcal{L}t)$ is a completely positive trace-preserving map and the resolvent is its Laplace transform; in the Hilbert--Schmidt norm of the solver this gives $\|S^{-1}\|\leq\sqrt{D_{\mathrm H}}/\eta$, a worst case that the examples do not approach. \texttt{"condition\_estimate"} is the right-hand side above, with $\|\mathcal{L}\|$ obtained by power iteration (\texttt{backend.generator\_norm()}, a lower estimate) and the maximum over the frequency intervals of the protocol; it is \texttt{None} when no interval is in the frequency domain. \texttt{"forward\_error\_estimate"} is its product with the largest relative residual. In the examples of the article the error of a solve is of the order of its relative residual, far below this bound. The Hilbert-space resolvent returns \texttt{iterations} and \texttt{relative\_residual} in its diagnostics. The dense backend reports the residual of its direct solves in the factorized evaluation; the pointwise evaluation applies cached inverses and reports none.
+whatever the dimension. For a dissipative generator the same resolvent has norm at most $1/\eta$ in the trace norm, because $\exp(\mathcal{L}t)$ is a completely positive trace-preserving map and the resolvent is its Laplace transform; in the Hilbert--Schmidt norm of the solver this gives $\|S^{-1}\|\leq\sqrt{D_{\mathrm H}}/\eta$. \texttt{"condition\_estimate"} is the right-hand side of the bound for a normal generator, with $\|\mathcal{L}\|$ obtained by power iteration (\texttt{backend.generator\_norm()}, a lower estimate) and the maximum over the frequency intervals of the protocol; it is \texttt{None} when no interval is in the frequency domain. It is an indicator of the size of the condition number and not a bound for a dissipative generator, where it can be exceeded by up to a factor $\sqrt{D_{\mathrm H}}$. \texttt{"forward\_error\_estimate"} is its product with the largest relative residual and is to be read in the same way. The residual and the agreement with the dense backend are the controls to rely on; in the examples of the article the error of a solve is of the order of its relative residual. The Hilbert-space resolvent returns \texttt{iterations} and \texttt{relative\_residual} in its diagnostics. The dense backend reports the residual of its direct solves in the factorized evaluation; the pointwise evaluation applies cached inverses and reports none.
 
 Reducing the residual is a matter of \texttt{krylov\_tolerance}. Iterative refinement, which solves $S\,\delta=b-Sx$ and updates $x$, was evaluated and is not offered: each step costs as many GMRES iterations as the solve it corrects, so that reaching $5\times10^{-13}$ from $10^{-6}$ takes 36 iterations, summed over four frequencies, on the thermal four-site chain at $\eta=0.03$~meV, whereas a solve with \texttt{krylov\_tolerance=1e-12} takes 28 for an error of $9\times10^{-16}$.
 
@@ -1027,6 +1036,7 @@ and \texttt{diagonal\_solve=True} (the default) solves every shifted system, dir
 \paragraph{Restart of GMRES.}
 \texttt{resolvent\_restart=None} leaves the restart length to SciPy ($\min(20,n)$). A longer restart reduces the number of iterations but makes each of them dearer and stores $m+1$ Krylov vectors of $D_{\mathrm L}=D_{\mathrm H}^2$ entries ($85$~MB for $m=200$ at $D_{\mathrm H}=163$). No value wins on the problems measured, so the default is kept. Unpreconditioned solves of the thermal spin chain of Example~1 (\texttt{preconditioner=None}) took, per solve, with $m=20, 50, 100, 200$:
 \begin{center}
+\footnotesize
 \begin{tabular}{lrrrr}
 \toprule
  & $m=20$ & $m=50$ & $m=100$ & $m=200$\\
@@ -1053,7 +1063,7 @@ For the thermal spin chain of Example~1 (\(D=57\), \(\eta=0.03\)~meV), the mean
 number of GMRES iterations per solve falls from about 1\,100 to 1, and the time
 for a \(3\times3\) subgrid from 1.2~s to 0.011~s; with the default exact diagonal solve there
 is no iteration and the time is 0.007~s. The measurements as a function of
-\(D\) and \(\eta\) are given in Sec.~6 of the article and in
+\(D\) and \(\eta\) are given in Sec.~\ArtSISecScaling{} of the Supplementary Material of the article and in
 \texttt{validation/benchmarks/example1\_benchmark.ipynb}.
 
 
@@ -1081,6 +1091,13 @@ The default is
 \begin{verbatim}
 backend="sparse_sector"
 \end{verbatim}
+
+It is the backend that scales with the Hilbert-space dimension. For the smallest
+models (a Hilbert space of dimension $D_{\mathrm{H}}\leq10$ in the examples of the
+article) the dense backend is faster, and \texttt{backend="auto"} does not make
+that distinction: it takes the first backend, in the order sparse then dense,
+whose capabilities satisfy the model requirements, so that it selects the dense
+backend only when the sparse one cannot satisfy a requirement.
 
 When \texttt{backend="auto"} is selected, the solver compares the model
 requirements with the declared backend capabilities. The requirements include:
@@ -1288,6 +1305,8 @@ This history is automatically generated from the interaction labels when \texttt
 
 The coherence-order history is used by \texttt{generate\_nq\_spectrum} to separate \(+NQ\), \(-NQ\), and total \(NQ\) contributions.
 
+The history is a label of the interaction sequence. It describes the coherence content of the propagated state, and the \(\pm NQ\) separation of \texttt{generate\_nq\_spectrum} is a statement about that content, only when the generator is phase covariant (\([\mathcal{L},\hat N^{\times}]=0\), \([\hat N,\hat\mu_\pm]=\pm\hat\mu_\pm\), Sec.~\ArtSecScope{} of the article); the solver does not test this property.
+
 
 
 
@@ -1470,5 +1489,16 @@ where keyword overrides take precedence over \texttt{params}. Important options 
 The \texttt{view} option accepts \texttt{"real"}, \texttt{"imag"}, \texttt{"abs"}, or \texttt{"all"}. Normalization may be independent per panel, shared per row, global, or disabled through \texttt{"panel"}, \texttt{"row"}, \texttt{"global"}, and \texttt{"none"}; legacy aliases are normalized internally. Real and imaginary panels use symmetric color limits around zero, whereas absolute-value panels use non-negative limits.
 
 Diagonal reference lines may be selected automatically or requested as rephasing, unrephasing, or both. \texttt{plot\_quadrant} accepts the full plane, a zoomed region, or quadrants 1--4. Convenience wrappers cover pathway panels, real/imaginary/absolute views, result contours, and multiple coherence orders. Raw-array utilities remain available for contour and one-dimensional plots.
+
+\section{Versions and compatibility}
+\label{sec:versions}
+
+Releases are numbered \emph{major.minor.patch}, starting from 1.0.0, the version this manual describes. A patch release corrects errors without changing the documented behavior. A minor release adds features and keeps the documented behavior. A change that can alter the signature or the result of an existing call, such as a new required argument, the removal of a default (that of \texttt{eta}, for example) or a different default (the \texttt{"auto"} preconditioner of the sparse backend), is a \emph{breaking change} and is made only in a major release.
+
+The public interface is the set of names exported by \texttt{qudpy\_fdgf} (its \texttt{\_\_all\_\_}) and documented in this manual, with the arguments, defaults, and result fields described here. Names that start with an underscore, the internal organization of the backends, and the keys of the \texttt{diagnostics} dictionaries that this manual does not describe are not part of it and may change in any release.
+
+A name or an argument of the public interface that is to be removed is first deprecated for at least one minor release: it keeps working, emits a \texttt{DeprecationWarning} that names its replacement, and is listed in the changelog.
+
+The file \texttt{CHANGELOG.md} of the code repository records every change, newest first, under the headings \emph{Breaking changes}, \emph{Changed}, and \emph{Added}, and the article and this manual are updated with each entry. Its section \emph{Unreleased} gathers the changes made since the development versions and will be listed under 1.0.0 at the release; the breaking ones (the removal of the default of \texttt{eta}, the \texttt{"auto"} preconditioner of the sparse backend, the removal of the default Boltzmann constant of the thermal models, and the renumbering of the examples) concern code written against those development versions.
 
 \end{document}

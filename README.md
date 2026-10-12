@@ -23,19 +23,20 @@ transitions, initial state, and observable.
 
 | Package | Required | Used for | Tested with |
 |---|---|---|---|
-| Python | 3.10 or later | | 3.13.14 |
-| NumPy | 1.24 or later | core | 2.5.0 |
-| SciPy | 1.10 or later | core (Krylov, GMRES) | 1.18.0 |
-| Matplotlib | 3.7 or later | `SpectroscopyPlotter` and figures | 3.11.0 |
-| QuTiP | optional | physical operators in the examples | 5.3.0 |
-| UFSS | optional | automatic pathway generation (Examples 1, 3 and 4) | 0.2.5 |
-| pytest | optional | test suite | 9.1.1 |
-| psutil, nbformat, nbclient | optional | `validation/` (memory, command-line notebooks) | 7.2.2, 5.11.1, 0.11.0 |
+| Python | 3.13 or later | | 3.13.14 |
+| NumPy | 2.5 or later | core | 2.5.0 |
+| SciPy | 1.18 or later | core (Krylov, GMRES) | 1.18.0 |
+| Matplotlib | 3.11 or later | `SpectroscopyPlotter` and figures | 3.11.0 |
+| QuTiP | optional, 5.3 or later | physical operators in the examples | 5.3.0 |
+| UFSS | optional, 0.2.5 or later | automatic pathway generation (Example 2) | 0.2.5 |
+| IPython, ipykernel | optional, 9.15 and 7.3 or later | example notebooks | 9.15.0, 7.3.0 |
+| pytest | optional, 9.1 or later | test suite | 9.1.1 |
+| psutil, nbformat, nbclient | optional, 7.2, 5.11 and 0.11 or later | `validation/` (memory, command-line notebooks) | 7.2.2, 5.11.1, 0.11.0 |
 
 Extras of `pip install -e '.[...]'`: `examples` (QuTiP, UFSS, IPython, ipykernel), `validation`
 (the previous ones plus psutil, nbformat, nbclient), `dev` (pytest), `manybody` (TeNPy, only for
-`qudpy_fdgf.experimental`). All tests and notebooks were run on Windows 11 with the versions
-above. BLAS is restricted to one thread (`OMP_NUM_THREADS=1`) for the timings of `validation/`.
+`qudpy_fdgf.experimental`). The minimum versions are the tested ones. All tests and notebooks were run on
+Windows 11 with the versions above; other platforms were not tested. BLAS is restricted to one thread (`OMP_NUM_THREADS=1`) for the timings of `validation/`.
 
 ## Repository layout
 
@@ -56,7 +57,7 @@ src/qudpy_fdgf/          the package (generic engine, no physical model)
     capabilities.py, exceptions.py
     experimental/        low-rank and tensor-network prototypes (not part of the released API)
 examples/                quickstart.py, the two-level quickstart notebook and the two examples as notebooks
-    old_scripts/         earlier versions of the examples, kept until the review is finished
+    old_scripts/         earlier versions of the examples (not maintained)
 validation/              models.py, analysis/, benchmarks/, results/ (see validation/README.md)
 tests/                   api/ (contracts and options), physics/ (closed-form results and limits),
                          regression/ (stored outputs that refactors of the numerical core must reproduce)
@@ -129,7 +130,7 @@ script/notebook --->  external model + qudpy_fdgf
 qudpy_fdgf --->  no physical model
 ```
 
-The solver must never import a class such as `SpinOrbitalModel`.
+The solver must never import a physical model class.
 
 ## Minimal model contract
 
@@ -247,6 +248,10 @@ solver = SpectroscopySolver(eta=0.002, check_stationarity="warn",   # "warn" (de
 solver.feed_model(model, context=context)   # StationarityWarning if r > tolerance
 solver.stationarity_residual()              # r, at any time; also in solver.summary()
 ```
+
+`r` has the dimension of a rate and is compared with an absolute tolerance in the unit of the Hamiltonian:
+the same model written in eV, meV or ueV gives residuals that differ by factors of 1000, so set
+`stationarity_tolerance` accordingly.
 
 The check does not construct a stationary state, but the solver can compute it:
 
@@ -514,7 +519,7 @@ frequency, broadening, forward or adjoint, iterations, relative residual). The d
 residual of its direct solves in the factorized evaluation (`relative_residual_max` is `None` in the
 pointwise one, which applies cached inverses).
 
-## Plotter V10
+## Plotter
 
 The plotter is separate from the computation and accepts a configuration
 dictionary. By convention, `axis_values[0]` is plotted on the vertical axis and
@@ -582,15 +587,15 @@ plotter.plot_real_imag_abs(
 
 For an additional output, use `source="observables"` and supply
 `observable="fluorescence"`. The `plot_pathways_multiorder` method remains
-available as a compact V9-inspired interface.
+available as a compact interface.
 
 ## Setup
 
 ```python
 from qudpy_fdgf import SpectroscopySolver
-from my_spin_orbital_model import SpinOrbitalModel
+from my_model import MyModel
 
-model = SpinOrbitalModel(...)
+model = MyModel(...)
 
 solver = SpectroscopySolver(
     backend="sparse_sector",
@@ -609,7 +614,7 @@ solver.feed_model(model)
 - Krylov time propagation;
 - rank-one ket/bra branches;
 - matrix-free Hilbert-space resolvent solved with GMRES;
-- exact frequency-domain pathways through matrix-free Liouville action;
+- frequency-domain pathways through matrix-free Liouville action;
 - factorized evaluation of grids (adjoint resolvents, propagators and interactions, shared prefixes);
 - diagonal preconditioner for the GMRES solves: `preconditioner="auto"` (default) switches it on when the
   Hamiltonian blocks are diagonal blocks of single sectors (the eigenbasis the model adapters provide)
@@ -635,7 +640,7 @@ solver.feed_model(model)
 - no explicit Liouville matrix.
 
 The frequency-domain path still uses a density vector of size \(D^2\). It
-serves as an exact reference and sanity check, but it is not the final scalable
+serves as a reference and sanity check, but it is not the final scalable
 approach for large spin-orbital spaces. Such systems will require a low-rank
 algorithm or a more specialized wave-function formulation.
 

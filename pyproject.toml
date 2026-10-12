@@ -7,24 +7,25 @@ name = "qudpy-fdgf"
 dynamic = ["version"]
 description = "Computing ultrafast nonlinear optical responses using frequency-domain Green's functions"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 license = { file = "LICENSE" }
 dependencies = [
-    "numpy>=1.24",
-    "scipy>=1.10",
-    "matplotlib>=3.7",
+    "numpy>=2.5",
+    "scipy>=1.18",
+    "matplotlib>=3.11",
 ]
 
 [project.optional-dependencies]
+# The lower bounds are the versions with which the test suite and the notebooks were run (Windows 11).
 # Needed by the example notebooks: QuTiP builds the physical operators,
 # while ufss.DiagramGenerator generates the fifth-order pathways.
-examples = ["ufss", "ipython", "ipykernel", "qutip"]
+examples = ["ufss>=0.2.5", "ipython>=9.15", "ipykernel>=7.3", "qutip>=5.3"]
 # Needed to run the analysis and benchmark notebooks and scripts of validation/
 # (psutil measures memory; nbformat and nbclient execute notebooks from the command line).
-validation = ["ufss", "ipython", "ipykernel", "qutip", "psutil", "nbformat", "nbclient"]
+validation = ["ufss>=0.2.5", "ipython>=9.15", "ipykernel>=7.3", "qutip>=5.3", "psutil>=7.2", "nbformat>=5.11", "nbclient>=0.11"]
 # Only the qudpy_fdgf.experimental tensor-network modules import tenpy.
 manybody = ["physics-tenpy"]
-dev = ["pytest>=7"]
+dev = ["pytest>=9.1"]
 
 [project.urls]
 Repository = "https://github.com/SilvaScience/QuDPy-FDGF"
