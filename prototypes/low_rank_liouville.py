@@ -13,10 +13,10 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.sparse.linalg import LinearOperator, expm_multiply, gmres
 
-from ..backends.base import BackendBase
-from ..capabilities import BackendCapabilities, Capabilities
-from ..exceptions import CapabilityError, ConvergenceError
-from ..results import PathwayResult
+from qudpy_fdgf.backends.base import BackendBase
+from qudpy_fdgf.capabilities import BackendCapabilities, Capabilities
+from qudpy_fdgf.exceptions import CapabilityError, ConvergenceError
+from qudpy_fdgf.results import PathwayResult
 
 
 @dataclass(frozen=True)

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,24 @@ dynamic = ["version"]
 description = "Computing ultrafast nonlinear optical responses using frequency-domain Green's functions"
 readme = "README.md"
 requires-python = ">=3.13"
-license = { file = "LICENSE" }
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Mathieu Desmarais" },
+    { name = "Simón Paiva-Ortega" },
+    { name = "Félix Brunelle" },
+    { name = "Hao Li" },
+    { name = "Eric R. Bittner" },
+    { name = "Carlos Silva-Acuña" },
+]
+keywords = ["nonlinear spectroscopy", "Liouville pathways", "Green's functions", "open quantum systems", "Lindblad equation"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: Microsoft :: Windows",
+]
 dependencies = [
     "numpy>=2.5",
     "scipy>=1.18",
@@ -23,8 +40,6 @@ examples = ["ufss>=0.2.5", "ipython>=9.15", "ipykernel>=7.3", "qutip>=5.3"]
 # Needed to run the analysis and benchmark notebooks and scripts of validation/
 # (psutil measures memory; nbformat and nbclient execute notebooks from the command line).
 validation = ["ufss>=0.2.5", "ipython>=9.15", "ipykernel>=7.3", "qutip>=5.3", "psutil>=7.2", "nbformat>=5.11", "nbclient>=0.11"]
-# Only the qudpy_fdgf.experimental tensor-network modules import tenpy.
-manybody = ["physics-tenpy"]
 dev = ["pytest>=9.1"]
 
 [project.urls]

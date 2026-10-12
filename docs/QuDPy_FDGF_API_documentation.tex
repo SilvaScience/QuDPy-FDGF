@@ -20,7 +20,7 @@
 \usepackage[hidelinks]{hyperref}
 
 \title{QuDPy-FDGF Solver API and Implementation Reference}
-\author{Mathieu Desmarais, Sim\'on Paiva-Ortega, Hao Li, Eric R. Bittner, Carlos Silva-Acu\~{n}a}
+\author{Mathieu Desmarais, Sim\'on Paiva-Ortega, F\'elix Brunelle,\\ Hao Li, Eric R. Bittner, Carlos Silva-Acu\~{n}a}
 \date{Software version 1.0.0}
 
 \begin{document}
@@ -52,11 +52,11 @@ pip install -e .              # core: NumPy, SciPy, Matplotlib
 pip install -e ".[examples]"  # optional: QuTiP, UFSS, IPython (notebooks)
 pip install -e ".[dev]"       # optional: pytest
 \end{verbatim}
-The core dependencies are NumPy~$\geq 2.5$, SciPy~$\geq 1.18$, and Matplotlib~$\geq 3.11$, the versions with which the test suite was run; Matplotlib is used only by \texttt{SpectroscopyPlotter}. QuTiP is used by the example notebooks to build operators, and \texttt{ufss.DiagramGenerator} generates the fifth-order pathways of the closed limit of Example~2. The optional extra \texttt{[manybody]} installs TeNPy for the experimental modules, which are not part of this release. The reference output below was obtained with Python~3.13.14, NumPy~2.5.0, SciPy~1.18.0, and Matplotlib~3.11.0 on Windows~11; other platforms were not tested.
+The core dependencies are NumPy~$\geq 2.5$, SciPy~$\geq 1.18$, and Matplotlib~$\geq 3.11$, the versions with which the test suite was run; Matplotlib is used only by \texttt{SpectroscopyPlotter}. QuTiP is used by the example notebooks to build operators, and \texttt{ufss.DiagramGenerator} generates the fifth-order pathways of the closed limit of Example~2. The prototypes of the folder \texttt{prototypes/} (low-rank backend, TeNPy engines) are not installed and are not part of this release. The reference output below was obtained with Python~3.13.14, NumPy~2.5.0, SciPy~1.18.0, and Matplotlib~3.11.0 on Windows~11; other platforms were not tested.
 
 \subsection{A complete calculation}
 The script below treats an open two-level system with transition energy $2~\mathrm{eV}$, radiative decay at rate $\gamma_1$, and pure dephasing at rate $\gamma_\phi$. It performs the five steps common to every calculation: build the matrices, adapt them to the model contract, feed the model to the solver, declare the pathways and the protocol, and generate the spectrum.
-% Distributed as examples/quickstart.py.
+% Distributed as examples/old_scripts/quickstart.py.
 \begin{verbatim}
 import numpy as np
 from qudpy_fdgf import EigenbasisKModel, FrequencyPathway, SpectroscopySolver
@@ -129,10 +129,10 @@ Each numerical line is followed by its analytical value. The absorptive line has
 
 \subsection{Next steps and tests}
 \begin{itemize}
-\item \texttt{examples/quickstart.py}: the listing above.
+\item \texttt{examples/old\_scripts/quickstart.py}: the listing above.
 \item \texttt{examples/quickstart\_two\_level\_model.ipynb}: the tutorial of the manuscript (Sec.~\ArtSecUsage), with populations, action detection, and integrated jump observables (Sec.~\ref{sec:observables}); the listing of the manuscript is extracted from its cells tagged \texttt{listing}.
 \item \texttt{examples/example1\_xxz\_chain\_thermal.ipynb} and \texttt{examples/example2\_coupled\_modes\_detection.ipynb}: Examples~1 and~2 of the manuscript.
-\item \texttt{python -m pytest}: runs the test suite in \texttt{tests/}, including the analytical checks of the manuscript (about 30~s with a single BLAS thread, \texttt{OMP\_NUM\_THREADS=1}); \texttt{tests/api/} checks the contracts and options of the library, \texttt{tests/physics/} the closed-form results and limiting cases, and \texttt{tests/regression/} compares eight small calculations with stored outputs, which any change of the numerical core must reproduce.
+\item \texttt{python -m pytest}: runs the test suite in \texttt{tests/}, including the analytical checks of the manuscript (about 40~s with a single BLAS thread, \texttt{OMP\_NUM\_THREADS=1}); \texttt{tests/api/} checks the contracts and options of the library, \texttt{tests/physics/} the closed-form results and limiting cases, and \texttt{tests/regression/} compares eight small calculations with stored outputs, which any change of the numerical core must reproduce.
 \item \texttt{validation/}: analysis notebooks (convergence, analytical limits, backend agreement), benchmark notebooks and scripts (time, memory, comparison with the original QuDPy), the scripts that redraw the figures of the manuscript, the shared models, and the stored results (see \texttt{validation/README.md}).
 \end{itemize}
 Section~\ref{app1} documents the model contract, the solver, and the backends; Sec.~\ref{sec:pathway-conventions} fixes the sign and ordering conventions of the pathways.

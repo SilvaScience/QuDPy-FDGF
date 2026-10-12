@@ -20,7 +20,7 @@ the source of its listing; Examples 1 and 2 are those of Sec. 5.
 
 Other files in this folder:
 
-- `quickstart.py`: short script (the Quick start of the API documentation);
+- `old_scripts/quickstart.py`: short script (the Quick start of the API documentation and the reference test run of the README; it stays in `old_scripts/`);
 - `old_scripts/`: earlier versions of the examples (`two_level_open_observables*.ipynb`,
   `spin_chain_k_space.ipynb`, `chromophore_chi5_2q.ipynb`, `fock_space_solver_tutorial.ipynb`,
   `two_level_minimal.py`, `example1_usage.py`) and `example3_chi5_2q.ipynb`, the fifth-order

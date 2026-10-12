@@ -3,6 +3,8 @@
 **QuDPy-FDGF: A Python-Based Tool for Computing Ultrafast Nonlinear Optical
 Responses Using Frequency-Domain Green's Functions.**
 
+Free software under the GNU General Public License v3 (see [License](#license) and [Citation](#citation)).
+
 The distribution is named `qudpy-fdgf` and the import name is `qudpy_fdgf`.
 Install it in editable mode from the repository root:
 
@@ -34,8 +36,7 @@ transitions, initial state, and observable.
 | psutil, nbformat, nbclient | optional, 7.2, 5.11 and 0.11 or later | `validation/` (memory, command-line notebooks) | 7.2.2, 5.11.1, 0.11.0 |
 
 Extras of `pip install -e '.[...]'`: `examples` (QuTiP, UFSS, IPython, ipykernel), `validation`
-(the previous ones plus psutil, nbformat, nbclient), `dev` (pytest), `manybody` (TeNPy, only for
-`qudpy_fdgf.experimental`). The minimum versions are the tested ones. All tests and notebooks were run on
+(the previous ones plus psutil, nbformat, nbclient), `dev` (pytest). The minimum versions are the tested ones. All tests and notebooks were run on
 Windows 11 with the versions above; other platforms were not tested. BLAS is restricted to one thread (`OMP_NUM_THREADS=1`) for the timings of `validation/`.
 
 ## Repository layout
@@ -55,13 +56,13 @@ src/qudpy_fdgf/          the package (generic engine, no physical model)
     results.py           SpectrumResult, PathwayResult, PlotResult
     plotting.py          SpectroscopyPlotter
     capabilities.py, exceptions.py
-    experimental/        low-rank and tensor-network prototypes (not part of the released API)
-examples/                quickstart.py, the two-level quickstart notebook and the two examples as notebooks
-    old_scripts/         earlier versions of the examples (not maintained)
+examples/                the two-level quickstart notebook and the two examples as notebooks
+    old_scripts/         earlier versions of the examples (not maintained); quickstart.py, the script of the reference test run, stays here
 validation/              models.py, analysis/, benchmarks/, results/ (see validation/README.md)
 tests/                   api/ (contracts and options), physics/ (closed-form results and limits),
                          regression/ (stored outputs that refactors of the numerical core must reproduce)
 docs/                    API reference manual (PDF and LaTeX source)
+prototypes/              low-rank and tensor-network prototypes (not installed, not tested, not maintained; see its README)
 ```
 
 ## Reference test run
@@ -72,7 +73,7 @@ Install the package with the examples extra, then run from the repository root.
 rephasing response, each followed by its analytical value.
 
 ```bash
-python examples/quickstart.py
+python examples/old_scripts/quickstart.py
 ```
 
 Expected output:
@@ -97,21 +98,21 @@ N_fl / S_pop = 0.993262; 1 - exp(-5) = 0.993262
 
 The second line is a rounding error, of the order of 1e-16 and platform dependent. The cell saves its results in `validation/results/data/quickstart.npz`.
 
-**3. Test suite** (about 30 s).
+**3. Test suite** (about 40 s).
 
 ```bash
 python -m pytest
 ```
 
-Expected: `247 passed` in about 30 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+Expected: `248 passed` in about 40 s (a local `tests/consistency/` folder, if present, adds 3 tests).
 
 ## Examples, tests, and validation
 
-- `examples/quickstart.py`: open two-level system, linear and third-order rephasing responses,
+- `examples/old_scripts/quickstart.py`: open two-level system, linear and third-order rephasing responses,
   with analytical checks (about 2 s). It is the Quick start of the API documentation.
 - `examples/quickstart_two_level_model.ipynb` and `examples/example{1,2}_*.ipynb`: the quickstart and the two examples, as notebooks (see `examples/README.md`).
-- `python -m pytest`: runs `tests/` in about 30 s (`-m "not slow"` skips the slowest). `tests/api/`
-  checks the contracts and options of the library, `tests/physics/` checks closed-form results and
+- `python -m pytest`: runs `tests/` in about 40 s (`-m "not slow"` skips the slowest). `tests/api/`
+  checks the contracts and options of the library and runs the reference test run of step 1 above, `tests/physics/` checks closed-form results and
   limiting cases of the manuscript (quickstart formulas, exact jump integral, decay rates, harmonic
   cancellation at fifth order, the excitation-number action identity of Example 2). `tests/regression/` compares eight small calculations (two-level
   system, dissipative and thermal chains, time-domain route, fifth-order bosons) with stored outputs
@@ -333,7 +334,7 @@ rates.coherence_decay[x, y]                  # decay rate of |x><y|
 rates.coherences(between=("0", "1"))         # (x, y, omega_xy, gamma_xy) between two sectors
 ```
 
-For the open two-level system of `examples/quickstart.py` it returns
+For the open two-level system of `examples/old_scripts/quickstart.py` it returns
 \(\gamma_1\) for the excited-state population and
 \(\Gamma_2=\gamma_1/2+\gamma_\phi\) for the optical coherence.
 
@@ -657,14 +658,11 @@ algorithm or a more specialized wave-function formulation.
 
 ### Backends not covered by this release
 
-`LowRankLiouvilleBackend`, the tenpy engines (`TenpyDMRGEngine` and
-`TenpyTDVPEngine`), and the associated many-body orchestration
-(`ManyBodySolver` and `ManyBodyDynamicsSolver`) live in `experimental/`. They
-are neither imported nor exposed by `SpectroscopySolver` in this release. They
-remain available through explicit imports (for example,
-`from qudpy_fdgf.experimental.low_rank_liouville import
-LowRankLiouvilleBackend`) for continued development, but they are not
-maintained or guaranteed to be stable here.
+`LowRankLiouvilleBackend`, the TeNPy engines (`TenpyDMRGEngine` and `TenpyTDVPEngine`), and the associated many-body
+orchestration (`ManyBodySolver` and `ManyBodyDynamicsSolver`) are prototypes kept in `prototypes/`, outside the installed
+package. They are neither imported nor exposed by `SpectroscopySolver`, they are not tested, and they are not maintained
+or guaranteed to be stable. From the repository root, for example,
+`from prototypes.low_rank_liouville import LowRankLiouvilleBackend` (the TeNPy modules need `physics-tenpy`).
 
 ## Pathway conventions
 
@@ -723,3 +721,32 @@ not only its modulus.
 - this release covers only `DenseLiouvilleBackend` and
   `SparseSectorBackend`; see "Backends not covered by this release" above;
 - construction and physical validation of the basis belong to the model.
+
+## License
+
+QuDPy-FDGF is free software, released under the GNU General Public License, version 3 (SPDX identifier
+`GPL-3.0-only`). The full text is in `LICENSE`.
+
+## Citation
+
+If you use QuDPy-FDGF in published work, please cite the article that describes it and the software release.
+
+- Article: M. Desmarais, S. Paiva-Ortega, F. Brunelle, H. Li, E. R. Bittner and C. Silva-Acuña, *QuDPy-FDGF: A Python-Based Tool for
+  Computing Ultrafast Nonlinear Optical Responses Using Frequency Domain Green's Functions*, Computer Physics
+  Communications (in preparation; the reference is completed at publication).
+- Software: `CITATION.cff` (GitHub's "Cite this repository" reads it). The DOI of the archived release is added at the
+  release.
+
+```bibtex
+@software{desmarais2026qudpyfdgf,
+  author  = {Desmarais, Mathieu and Paiva-Ortega, Sim{\'o}n and Brunelle, F{\'e}lix and Li, Hao and Bittner, Eric R. and Silva-Acu{\~n}a, Carlos},
+  title   = {{QuDPy-FDGF}: a {P}ython-based tool for computing ultrafast nonlinear optical responses using frequency-domain {G}reen's functions},
+  year    = {2026},
+  url     = {https://github.com/SilvaScience/QuDPy-FDGF},
+  version = {1.0.0},
+  note    = {GPLv3; DOI to be added at release}
+}
+```
+
+The pathway conventions are those of QuDPy (S. A. Shah *et al.*, Comput. Phys. Commun. **292** (2023) 108891) and
+UFSS (P. A. Rose and J. J. Krich, J. Chem. Phys. **154** (2021) 034109); please cite them as well when you use them.

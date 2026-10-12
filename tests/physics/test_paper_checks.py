@@ -1,4 +1,4 @@
-"""Fast analytical checks taken from the manuscript (the quickstart notebook and the Quick start script).
+"""Fast analytical checks taken from the manuscript (the quickstart notebook and the Quick start script, examples/old_scripts/quickstart.py).
 
 Each check compares a numerical result with a closed-form value:
 - linear absorption of an open two-level system: FWHM = 2 (Gamma_2 + eta);

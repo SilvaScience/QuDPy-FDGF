@@ -158,7 +158,7 @@ _print_peak(
     result_nonrephasing.axis_values[0], result_nonrephasing.axis_values[1],
 )
 
-# --- 13. Plot with the V10 plotter ---
+# --- 13. Plot ---
 # Figure 2 convention: real is absorptive and imaginary is dispersive.
 plotter = SpectroscopyPlotter(detection_phase=0)
 plotter_2d = SpectroscopyPlotter(detection_phase=np.pi / 2)

@@ -7,6 +7,12 @@ the compatibility and deprecation policy is the section "Versions and compatibil
 ## Unreleased
 
 ### Breaking changes
+- The package `qudpy_fdgf.experimental` (low-rank backend, TeNPy DMRG and TDVP engines, many-body contracts) moves to `prototypes/` at the
+  repository root: it is no longer installed with the package, the `manybody` extra is removed, and its modules import `qudpy_fdgf`
+  absolutely. It is untested and not maintained (see `prototypes/README.md`).
+- The base exception `SolverV10Error` is renamed `QuDPyFDGFError` (exported by `qudpy_fdgf`); `ModelContractError`, `CapabilityError`,
+  `SectorError` and `ConvergenceError` derive from it as before. The docstrings of `plot_spectrum_result_contours` and
+  `plot_pathways_multiorder` no longer refer to a V9 plotter.
 - Minimum versions raised to the tested ones: Python >= 3.13, NumPy >= 2.5, SciPy >= 1.18, Matplotlib >= 3.11 (they were
   3.10, 1.24, 1.10 and 3.7, never tested; `gmres(rtol=...)` needs SciPy >= 1.12 and `np.trapezoid` NumPy >= 2.0). The optional
   extras carry the tested lower bounds as well. Tested on Windows 11 only.
@@ -52,6 +58,9 @@ the compatibility and deprecation policy is the section "Versions and compatibil
 - `README.md`: the test suite has 247 tests (250 with the local `tests/consistency/` folder) and takes about 30 s.
 
 ### Changed
+- `quickstart.py` stays in `examples/old_scripts/`; the README, the API manual and `examples/README.md` give its path.
+- The stored outputs of two notebooks no longer contain an absolute path of the authors' machine
+  (`example2_chi5_analysis.ipynb` now prints the path of its result relative to the repository).
 - Documentation: the stationarity residual `||L rho|| / ||rho||` is documented as it is, a quantity with the dimension of a
   rate compared with an absolute tolerance in the unit of the Hamiltonian (README, manual, article). Planned for the next major
   release: a dimensionless residual `||L rho|| / (||L|| ||rho||)`.
@@ -130,6 +139,10 @@ the compatibility and deprecation policy is the section "Versions and compatibil
   pair of delays separately.
 
 ### Added
+- `CITATION.cff`, the License and Citation sections of the README, and the authors, the SPDX license (`GPL-3.0-only`) and
+  classifiers in `pyproject.toml` (this needs setuptools >= 77; the table form of `project.license` is deprecated).
+- `tests/api/test_reference_run.py` runs `examples/old_scripts/quickstart.py`, the script of the reference test run of the README,
+  and checks its printed numbers against their analytical values (248 tests; 251 with the local `tests/consistency/` folder).
 - Fluorescence on an infinite window: `ObservableSpec.mean_jump(..., time_window=(t0, np.inf))`. The count rate of a
   state tends to `Tr(M rho_ss) Tr(rho)`, so the solver integrates the excess over that stationary background,
   `X = exp(t0 L^+) x` with `(L^+ - |1><<rho_ss|) x = -(m - P m)`, `m = vec(M^+)`, `P m = conj(Tr(M rho_ss)) vec(1)`:
