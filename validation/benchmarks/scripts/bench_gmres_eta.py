@@ -1,0 +1,76 @@
+"""GMRES iterations of the sparse backend versus eta, for Example 1 at its published size.
+
+XXZ chain (L = 6, N_max = 4, D = 57, canonical state at 4 K), rephasing GSB + SE + ESA,
+t2 = 0, 3 x 3 subgrid of the published window, eta from 0.3 to 0.003 meV (production:
+0.03 meV). The generator is closed, so eta alone keeps the shifted systems away from
+singularity. The iterations come from result.diagnostics["solver"] (mean and maximum over the
+solves of the factorized evaluation, forward and adjoint). The dense backend at the same eta
+is the reference; its spectra are saved and reused by later runs.
+
+Usage:  python bench_gmres_eta.py            (plain GMRES, preconditioner=None, writes results/data/gmres_eta.json)
+        python bench_gmres_eta.py diagonal   (GMRES with the diagonal preconditioner, results/data/gmres_eta_diagonal.json)
+        python bench_gmres_eta.py exact      (defaults: this generator is diagonal, so the shifted systems are solved
+                                              by division, results/data/gmres_eta_exact.json)
+"""
+import os
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_v, "1")          # single-thread BLAS, before NumPy is imported
+import sys
+from pathlib import Path as _Path
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))   # validation/ (models.py)
+from models import DATA
+import json
+import time
+
+import numpy as np
+from qudpy_fdgf import SpectroscopySolver
+from qudpy_fdgf.exceptions import ConvergenceError
+from models import EX1, EX1_PATHWAYS, EX1_PROTOCOL, example1_context, example1_model
+
+ETAS = (0.3, 0.1, 0.03, 0.01, 0.003)
+MODE = sys.argv[1] if len(sys.argv) > 1 else "plain"
+OPTIONS = {"plain": {"preconditioner": None, "diagonal_solve": False},
+           "diagonal": {"preconditioner": "diagonal", "diagonal_solve": False},
+           "exact": {}}[MODE]
+RESULT = "gmres_eta.json" if MODE == "plain" else f"gmres_eta_{MODE}.json"
+OUT = DATA
+OUT.mkdir(parents=True, exist_ok=True)
+GRID = 3          # the iterations per solve do not depend on the grid; 3 x 3 keeps the dense references cheap
+AXES = {"omega_1q": np.linspace(-1.55, -0.55, GRID), "omega_emit": np.linspace(0.55, 1.55, GRID)}
+
+rows = []
+for eta in ETAS:
+    model, _ = example1_model()
+    reference_file = OUT / f"gmres_eta_dense_{eta}.npy"
+    if reference_file.exists():
+        ref = np.load(reference_file)
+    else:
+        dense = SpectroscopySolver(backend="dense", eta=eta, cache_resolvents=False)   # memory
+        dense.feed_model(model, context=example1_context())
+        ref = dense.generate_spectrum(EX1_PROTOCOL, AXES, pathways=EX1_PATHWAYS,
+                                      fixed_coordinates={"t2": EX1["t2"]}).components["rephasing"]
+        del dense
+        np.save(reference_file, ref)
+    sparse = SpectroscopySolver(backend="sparse_sector", eta=eta, krylov_tolerance=EX1["krylov_tolerance"],
+                                **OPTIONS)
+    sparse.feed_model(model, context=example1_context())
+    start = time.perf_counter()
+    row = {"eta_meV": eta, "D": 57, "grid": [GRID, GRID], "mode": MODE,
+           "method": None}
+    try:
+        result = sparse.generate_spectrum(EX1_PROTOCOL, AXES, pathways=EX1_PATHWAYS,
+                                          fixed_coordinates={"t2": EX1["t2"]})
+        statistics = result.diagnostics["solver"]
+        row.update({"converged": True,
+                    "relative_difference_to_dense": float(np.max(abs(result.components["rephasing"] - ref)) / np.max(abs(ref))),
+                    "method": statistics["method"],
+                    "solves": statistics["solves"], "mean_iterations": statistics.get("iterations_mean"),
+                    "max_iterations": statistics.get("iterations_max"),
+                    "relative_residual_max": statistics["relative_residual_max"],
+                    "condition_estimate": statistics["condition_estimate"]})
+    except ConvergenceError as exc:
+        row.update({"converged": False, "error": str(exc)[:200]})
+    row["time_s"] = time.perf_counter() - start
+    rows.append(row)
+    print(json.dumps(row), flush=True)
+    (OUT / RESULT).write_text(json.dumps(rows, indent=2))

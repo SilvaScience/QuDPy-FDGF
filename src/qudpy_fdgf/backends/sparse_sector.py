@@ -10,6 +10,7 @@ from collections import OrderedDict
 import hashlib
 
 import numpy as np
+from scipy.sparse import issparse
 from scipy.sparse.linalg import LinearOperator, expm_multiply, gmres
 
 from .base import BackendBase
@@ -19,13 +20,52 @@ from ..observables import ObservableSpec
 from ..results import PathwayResult
 
 
+def _is_diagonal(operator, tolerance=1e-12):
+    """Whether an array or sparse block is diagonal; anything else (matrix-free) is not known to be."""
+    if issparse(operator):
+        coordinates = operator.tocoo()
+        data = np.abs(coordinates.data)
+        scale = float(data.max()) if data.size else 0.0
+        off = data[coordinates.row != coordinates.col]
+        return bool(off.size == 0 or off.max() <= tolerance * max(scale, np.finfo(float).tiny))
+    if isinstance(operator, np.ndarray) and operator.ndim == 2 and operator.shape[0] == operator.shape[1]:
+        scale = float(np.abs(operator).max()) if operator.size else 0.0
+        off = np.abs(operator - np.diag(np.diag(operator)))
+        return bool(off.max(initial=0.0) <= tolerance * max(scale, np.finfo(float).tiny))
+    return False
+
+
 class SparseSectorBackend(BackendBase):
     """Pathway inputs -> sparse ket/bra branch propagation.
 
     Time evolution and Hilbert resolvents remain matrix-free.
+    ``preconditioner="diagonal"`` preconditions every GMRES resolvent with the
+    inverse of the shifted diagonal of the generator (or of the Hamiltonian).
+    The diagonal is exact when the generator is diagonal in the dyad basis, that
+    is for a model supplied in its eigenbasis (diagonal Hamiltonian blocks) whose
+    collapse operators, if any, are diagonal too: each solve then converges in one
+    iteration. With collapse channels that couple dyads it remains an approximation
+    that still divides the iteration count by a large factor, because the coupling
+    is weak next to the energy differences on the diagonal.
+    The default ``"auto"`` selects ``"diagonal"`` when the Hamiltonian blocks are
+    diagonal blocks of single sectors (the eigenbasis the model adapters provide) and
+    ``None`` otherwise; ``self.preconditioner`` holds the choice made.
+
+    When the generator is *exactly* diagonal in the dyad basis (diagonal Hamiltonian blocks and
+    collapse operators that are diagonal blocks too, as for a closed model in its eigenbasis or
+    for pure dephasing), ``diagonal_solve=True`` (the default) solves every shifted system by an
+    element-wise division, ``x = b / [(eta - i omega) - A_diag]``: the sum over states, exact to
+    rounding, one pass over the vector. The Hilbert resolvent of a diagonal Hamiltonian is solved
+    the same way. ``diagonal_solve=False`` keeps GMRES with its preconditioner, which is how the
+    preconditioner itself is tested. ``generator_is_diagonal`` reports whether the generator is
+    diagonal and ``solve_statistics()["method"]`` which method ran.
     """
 
+    preconditioners = (None, "diagonal", "auto")
+
     name = "sparse_sector"
+    supports_factorized = True
+    _solve_method = "gmres"
     capabilities = Capabilities(
         pure_state=True,
         mixed_state=True,
@@ -52,15 +92,28 @@ class SparseSectorBackend(BackendBase):
     def __init__(
         self,
         *,
-        eta=0.05,
+        eta=None,
         krylov_tolerance=1e-10,
         krylov_maxiter=None,
         resolvent_restart=None,
+        preconditioner="auto",
+        diagonal_solve=True,
         cache_propagations=True,
         max_cache_entries=32,
         **options,
     ):
         super().__init__(eta=eta, **options)
+        if preconditioner not in self.preconditioners:
+            raise ValueError(
+                "preconditioner must be None, 'diagonal' or 'auto'; "
+                f"got {preconditioner!r}."
+            )
+        self.preconditioner_option = preconditioner
+        self.preconditioner = None if preconditioner == "auto" else preconditioner
+        self.diagonal_solve = bool(diagonal_solve)
+        self.generator_is_diagonal = False
+        self._diagonal_solve_active = False
+        self._hilbert_diagonal_active = False
         self.krylov_tolerance = float(krylov_tolerance)
         self.krylov_maxiter = (
             None if krylov_maxiter is None else int(krylov_maxiter)
@@ -72,64 +125,128 @@ class SparseSectorBackend(BackendBase):
         self.max_cache_entries = int(max_cache_entries)
         self._time_cache = OrderedDict()
         self._liouville_time_cache = OrderedDict()
+        self._integrated_detector_cache = {}
         self._liouville = None
+        self._liouville_diagonal = None
+        self._hamiltonian_diagonal = None
         self._initial_density_vector = None
 
-    def build(self, model, context=None):
-        super().build(model, context=context)
+    def _hamiltonian_is_diagonal(self):
+        """Whether every Hamiltonian block is a diagonal block of one sector (a model in its eigenbasis).
+
+        Then the diagonal of the generator in the dyad basis is its unperturbed part, the energy
+        differences, and collapse operators only perturb it. Blocks that are neither arrays nor sparse
+        matrices cannot be inspected and count as not diagonal.
+        """
+        for source, blocks in self._hamiltonian_blocks.items():
+            for target, operator in blocks.items():
+                if target != source or not _is_diagonal(operator):
+                    return False
+        return True
+
+    def _generator_is_diagonal(self):
+        """Whether the generator is exactly diagonal in the dyad basis |x><y|.
+
+        True when the Hamiltonian blocks are diagonal blocks of single sectors and every collapse
+        operator is a diagonal block too: then ``L|x><y| = [-i(E_x - E_y) + sum_c gamma_c (L_xx L_yy^*
+        - (K_xx + K_yy)/2)] |x><y|``. A collapse operator that moves population (``|j><i|``) or couples
+        coherences, or a block that cannot be inspected (matrix-free), makes it False.
+        """
+        if not self._hamiltonian_is_diagonal():
+            return False
+        for channel in self._collapse_channels:
+            for source, blocks in channel.operator_blocks.items():
+                for target, operator in blocks.items():
+                    if target != source or not _is_diagonal(operator):
+                        return False
+        return True
+
+    def build(self, model, context=None, initial_state=None):
+        super().build(model, context=context, initial_state=initial_state)
+        if self.preconditioner_option == "auto":
+            self.preconditioner = "diagonal" if self._hamiltonian_is_diagonal() else None
         self._liouville = self.generator.linear_operator
+        self.generator_is_diagonal = self._generator_is_diagonal()
+        self._diagonal_solve_active = self.diagonal_solve and self.generator_is_diagonal
+        self._hilbert_diagonal_active = self.diagonal_solve and self._hamiltonian_is_diagonal()
+        self._solve_method = "diagonal" if self._diagonal_solve_active else "gmres"
+        self._liouville_diagonal = None
+        self._hamiltonian_diagonal = None
+        if self.preconditioner == "diagonal" or self._diagonal_solve_active:
+            self._liouville_diagonal = self.generator.diagonal()
+        if self.preconditioner == "diagonal" or self._hilbert_diagonal_active:
+            self._hamiltonian_diagonal, _ = self.generator.operator_diagonal(
+                self._hamiltonian
+            )
         self._initial_density_vector = self._initial_density_matrix.reshape(
             -1, order="F"
         )
+        self._liouville_adjoint = LinearOperator(
+            self._liouville.shape,
+            dtype=np.complex128,
+            matvec=self._liouville.rmatvec,
+            rmatvec=self._liouville.matvec,
+        )
         return self
+
+    def factorized_applicable(self, protocol):
+        """Frequency axes, a dissipative generator or a mixed state take the Liouville route.
+
+        A closed model with a pure state and time intervals only is evaluated as a rank-one dyad,
+        which is cheaper than any Liouville vector; the factorized evaluation does not apply.
+        """
+        return bool(
+            protocol.frequency_axis_names
+            or not self.generator.is_unitary
+            or not self._initial_is_pure
+        )
+
+    @staticmethod
+    def _diagonal_preconditioner(shifted_diagonal):
+        """Shifted diagonal d -> LinearOperator applying v / d."""
+        size = shifted_diagonal.size
+        return LinearOperator(
+            (size, size),
+            dtype=np.complex128,
+            matvec=lambda value: np.asarray(value).reshape(-1)
+            / shifted_diagonal,
+        )
 
     def clear_caches(self):
         self._time_cache.clear()
         self._liouville_time_cache.clear()
+        self._integrated_detector_cache.clear()
 
-    def _apply_to_columns(self, vector, action):
-        """Matrix and Hilbert action -> column-wise action."""
+    def _density_matrix(self, vector):
+        """Column-stacked density vector -> square matrix."""
         dimension = self.layout.total_dimension
-        matrix = np.asarray(vector, dtype=np.complex128).reshape(
+        return np.asarray(vector, dtype=np.complex128).reshape(
             (dimension, dimension), order="F"
         )
-        result = np.empty_like(matrix)
-        for column in range(dimension):
-            result[:, column] = action(matrix[:, column])
-        return result
 
     def _liouville_matvec(self, density_vector):
         """Density vector -> matrix-free generator action."""
         return self.generator.matvec(density_vector)
 
+    def _transition_on_matrix(self, matrix, interaction):
+        return self.apply_transition_matrix(
+            matrix,
+            operator_name=interaction.operator,
+            direction=interaction.direction,
+            source_sector=interaction.source_sector,
+            target_sector=interaction.target_sector,
+        )
+
     def _apply_transition_left(self, density_vector, interaction):
-        return self._apply_to_columns(
-            density_vector,
-            lambda vector: self.apply_transition(
-                vector,
-                operator_name=interaction.operator,
-                direction=interaction.direction,
-                source_sector=interaction.source_sector,
-                target_sector=interaction.target_sector,
-            ),
+        """Density vector and interaction -> ``J rho``."""
+        return self._transition_on_matrix(
+            self._density_matrix(density_vector), interaction
         ).reshape(-1, order="F")
 
     def _apply_transition_right(self, density_vector, interaction):
-        """Density vector and interaction -> right bra-adjoint action."""
-        dimension = self.layout.total_dimension
-        rho = np.asarray(density_vector, dtype=np.complex128).reshape(
-            (dimension, dimension), order="F"
-        )
-        acted_dagger = self._apply_to_columns(
-            rho.conj().T.reshape(-1, order="F"),
-            lambda vector: self.apply_transition(
-                vector,
-                operator_name=interaction.operator,
-                direction=interaction.direction,
-                source_sector=interaction.source_sector,
-                target_sector=interaction.target_sector,
-            ),
-        )
+        """Density vector and interaction -> right bra-adjoint action ``rho J^dagger``."""
+        rho = self._density_matrix(density_vector)
+        acted_dagger = self._transition_on_matrix(rho.conj().T, interaction)
         return acted_dagger.conj().T.reshape(-1, order="F")
 
     def _propagate_liouville(self, density_vector, delay):
@@ -155,16 +272,120 @@ class SparseSectorBackend(BackendBase):
             ),
             dtype=np.complex128,
         )
+        self._counters["propagations"] += 1
         self._liouville_time_cache[key] = propagated.copy()
         self._liouville_time_cache.move_to_end(key)
         while len(self._liouville_time_cache) > self.max_cache_entries:
             self._liouville_time_cache.popitem(last=False)
         return propagated
 
-    def _solve_liouville_resolvent(self, density_vector, omega, eta):
+    def _reference_state_changed(self):
+        self._initial_density_vector = self._initial_density_matrix.reshape(-1, order="F")
+
+    def _solve_stationary(
+        self, reference, weights, *, restart=100, check_unique=False, check_cycles=20
+    ):
+        """GMRES on ``L + |r>><<weights|`` with ``r = reference``; a second solve with another ``r`` tests the kernel.
+
+        If the kernel of ``L`` is one-dimensional the solution is its trace-one element whatever
+        the trace-one vector ``r``. If the kernel is larger the system is singular and consistent, and
+        GMRES, which works in the Krylov space of ``r``, returns the projection of ``r`` on the kernel
+        (normalized), which changes with ``r``: that is what the comparison detects. The first ``r``
+        is the maximally mixed state, which is itself stationary for a unital generator (a closed
+        model), so that the answer is then the maximally mixed state rather than an arbitrary element.
+
+        A random ``r`` excites every slow mode, so the second solve is as stiff as the relaxation gap
+        of the generator: it is limited to ``check_cycles`` restart cycles of ``restart`` iterations
+        (2000 iterations by default). If it has not converged by then the uniqueness is reported as
+        unverified (``unique`` is ``None``); the first solve is unaffected. The test is off by default:
+        it costs seconds to tens of seconds from D = 57 and is conclusive only for small or well
+        conditioned generators (D = 16 needs 1900 iterations, D = 31 needs 5700 for a decay rate 1/1000
+        of the energy scale), where the dense backend tests uniqueness for free.
+        """
+        size = reference.size
+        dimension = self.layout.total_dimension
+
+        def solve(right_hand_side, maxiter):
+            operator = LinearOperator(
+                (size, size),
+                dtype=np.complex128,
+                matvec=lambda value: self.generator.matvec(value)
+                + right_hand_side * np.vdot(weights, value),
+            )
+            iterations = []
+            solution, status = gmres(
+                operator,
+                right_hand_side,
+                rtol=self.krylov_tolerance,
+                atol=0.0,
+                restart=min(int(restart), size),
+                maxiter=maxiter,
+                callback=iterations.append,
+                callback_type="pr_norm",
+            )
+            if status != 0:
+                residual = float(np.linalg.norm(operator @ solution - right_hand_side))
+                return None, len(iterations), residual
+            return solution, len(iterations), None
+
+        def trace(vector):
+            return np.sum(vector[:: dimension + 1])
+
+        # a stiff or degenerate generator makes GMRES crawl: 100 restart cycles unless krylov_maxiter says otherwise
+        first, iterations, residual = solve(reference, 100 if self.krylov_maxiter is None else self.krylov_maxiter)
+        if first is None:
+            raise ConvergenceError(
+                "GMRES did not converge for the stationary state "
+                f"(residual={residual:.3e} after {iterations} iterations): the relaxation gap of the "
+                "generator is probably too small for this solver (or the kernel is degenerate). Raise "
+                "krylov_maxiter, use the dense backend for a small model, or supply the state with "
+                "initial_state."
+            )
+        info = {"method": "gmres", "unique": None, "iterations": iterations, "second_solve_difference": None}
+        if check_unique:
+            generator = np.random.default_rng(97)
+            other = generator.standard_normal(size) + 1j * generator.standard_normal(size)
+            second, second_iterations, _ = solve(other / trace(other), check_cycles)
+            info["second_solve_iterations"] = second_iterations
+            if second is not None:
+                second = second / trace(second)
+                difference = float(np.linalg.norm(first - second) / np.linalg.norm(first))
+                info["second_solve_difference"] = difference
+                info["unique"] = bool(difference < max(1e-6, 1e3 * self.krylov_tolerance))
+        return first, info
+
+    def _gmres(self, operator, right_hand_side, preconditioner, *, initial_guess=None):
+        """GMRES run -> (solution, SciPy info, number of iterations)."""
+        iterations = []
+        solution, info = gmres(
+            operator,
+            right_hand_side,
+            M=preconditioner,
+            x0=initial_guess,
+            rtol=self.krylov_tolerance,
+            atol=0.0,
+            restart=self.resolvent_restart,
+            maxiter=self.krylov_maxiter,
+            callback=iterations.append,
+            callback_type="pr_norm",
+        )
+        return solution, info, len(iterations)
+
+    def _solve_liouville_resolvent(self, density_vector, omega, eta, *, adjoint=False):
+        """Vector and frequency -> solution of the shifted system (or of its adjoint).
+
+        An exactly diagonal generator is solved by division (``diagonal_solve``), otherwise by GMRES.
+        """
         shift = self.generator.frequency_shift(omega, eta)
+        if self._diagonal_solve_active:
+            solution = self._diagonal_resolvent(
+                np.asarray(density_vector, dtype=np.complex128).reshape(-1, 1), shift, adjoint
+            )[:, 0]
+            self._counters["resolvent_solves"] += 1
+            self._record_solve(iterations=0, omega=float(omega), eta=float(eta), adjoint=bool(adjoint))
+            return solution, 0.0
         dimension = self.layout.total_dimension**2
-        operator = LinearOperator(
+        forward = LinearOperator(
             (dimension, dimension),
             dtype=np.complex128,
             matvec=lambda value: shift * value
@@ -172,14 +393,20 @@ class SparseSectorBackend(BackendBase):
             rmatvec=lambda value: np.conj(shift) * value
             - self._liouville.rmatvec(value),
         )
-        raw_solution, info = gmres(
-            operator,
-            density_vector,
-            rtol=self.krylov_tolerance,
-            atol=0.0,
-            restart=self.resolvent_restart,
-            maxiter=self.krylov_maxiter,
+        operator = forward.H if adjoint else forward
+        diagonal = (
+            None
+            if self._liouville_diagonal is None
+            else shift - self._liouville_diagonal
         )
+        if adjoint and diagonal is not None:
+            diagonal = np.conj(diagonal)
+        preconditioner = (
+            None if diagonal is None else self._diagonal_preconditioner(diagonal)
+        )
+        density_vector = np.asarray(density_vector, dtype=np.complex128).reshape(-1)
+        right_hand_side = float(np.linalg.norm(density_vector))
+        raw_solution, info, iterations = self._gmres(operator, density_vector, preconditioner)
         residual = float(
             np.linalg.norm(operator @ raw_solution - density_vector)
         )
@@ -188,16 +415,71 @@ class SparseSectorBackend(BackendBase):
                 "Liouville GMRES resolvent did not converge "
                 f"(info={info}, residual={residual:.3e})."
             )
-        solution = self.generator.frequency_prefactor * raw_solution
+        self._counters["resolvent_solves"] += 1
+        self._max_residual = max(self._max_residual, residual)
+        self._record_solve(
+            iterations=iterations,
+            relative_residual=residual / right_hand_side if right_hand_side > 0 else 0.0,
+            omega=float(omega),
+            eta=float(eta),
+            adjoint=bool(adjoint),
+        )
+        prefactor = self.generator.frequency_prefactor
+        solution = (np.conj(prefactor) if adjoint else prefactor) * raw_solution
         return np.asarray(solution, dtype=np.complex128), residual
 
-    def _detect_density(self, density_vector, observable):
-        dimension = self.layout.total_dimension
-        observable_rho = self._apply_to_columns(
-            density_vector,
-            lambda vector: self.apply_detection_operator(vector, observable),
+    def _diagonal_resolvent(self, states, shift, adjoint):
+        """Columns and shift -> ``[shift - A]^-1`` (or its adjoint) applied by division, for a diagonal ``A``."""
+        denominator = shift - self._liouville_diagonal
+        if adjoint:
+            denominator = np.conj(denominator)
+        if not np.all(np.abs(denominator) > 0):
+            raise ConvergenceError(
+                "The shifted generator is singular at this frequency (eta = 0 on a pole of the generator)."
+            )
+        return self.generator.frequency_prefactor * states / denominator[:, None]
+
+    def _propagate_liouville_block(self, states, delay, adjoint):
+        """Vectors and delay -> ``exp(L t)`` (or its adjoint) applied to each column at once."""
+        delay = float(delay)
+        if delay == 0:
+            return states.copy()
+        generator = self._liouville_adjoint if adjoint else self._liouville
+        propagated = np.asarray(
+            expm_multiply(delay * generator, states, traceA=0.0),
+            dtype=np.complex128,
         )
-        value = np.trace(observable_rho.reshape((dimension, dimension)))
+        self._counters["propagations"] += states.shape[1]
+        return propagated
+
+    def interval_block(self, states, domain, values, eta=None, *, adjoint=False):
+        """Liouville vectors -> propagator or resolvent (or adjoint) at several coordinates."""
+        states = np.asarray(states, dtype=np.complex128)
+        eta = self.eta if eta is None else float(eta)
+        out = np.empty((states.shape[0], states.shape[1], len(values)), dtype=np.complex128)
+        for index, value in enumerate(values):
+            if domain == "time":
+                out[:, :, index] = self._propagate_liouville_block(states, value, adjoint)
+            elif self._diagonal_solve_active:
+                out[:, :, index] = self._diagonal_resolvent(
+                    states, self.generator.frequency_shift(value, eta), adjoint
+                )
+                self._counters["resolvent_solves"] += states.shape[1]
+                if self.options.get("record_solves", False):
+                    for _ in range(states.shape[1]):
+                        self._record_solve(iterations=0, omega=float(value), eta=float(eta), adjoint=bool(adjoint))
+            else:
+                for column in range(states.shape[1]):
+                    out[:, column, index], _ = self._solve_liouville_resolvent(
+                        states[:, column], value, eta, adjoint=adjoint
+                    )
+        return out
+
+    def _detect_density(self, density_vector, observable):
+        observable_rho = self.apply_detection_operator_matrix(
+            self._density_matrix(density_vector), observable
+        )
+        value = np.trace(observable_rho)
         if observable.kind == "jump_rate":
             value *= observable.efficiency
         return value
@@ -289,26 +571,142 @@ class SparseSectorBackend(BackendBase):
             )
         return value
 
+    def _detector_vector(self, detector):
+        """Detector -> vec(M^dagger), so that Tr(M rho) = <<M^dagger|rho>>."""
+        matrix = self.apply_detection_operator_matrix(
+            np.eye(self.layout.total_dimension, dtype=np.complex128), detector
+        )
+        return matrix.conj().T.reshape(-1, order="F")
+
+    def _integrated_detector(self, spec):
+        """Window and channel -> integral of the Heisenberg-evolved detector.
+
+        Returns X = int_{t0}^{t1} exp(s A^dagger) vec(M^dagger) ds, so that the
+        integrated count of any state is <<X|rho>>. The integral is exact: it
+        is the last column of exp[(t1 - t0) B] with the augmented generator
+        B = [[A^dagger, vec(M^dagger)], [0, 0]], applied matrix-free. X does
+        not depend on the pathway state and is cached.
+        """
+        start, stop = spec.time_window
+        key = (spec.channel, start, stop)
+        cached = self._integrated_detector_cache.get(key)
+        if cached is not None:
+            return cached
+        if np.isinf(stop):
+            integrated = self._infinite_window_detector(spec)
+            self._integrated_detector_cache[key] = integrated
+            return integrated
+        vector = self._detector_vector(spec.instantaneous().without_projection())
+        size = vector.size
+        generator = self._liouville            # matvec: A, rmatvec: A^dagger
+
+        def augmented_matvec(value):
+            value = np.asarray(value, dtype=np.complex128).reshape(-1)
+            result = np.zeros(size + 1, dtype=np.complex128)
+            result[:size] = generator.rmatvec(value[:size]) + value[size] * vector
+            return result
+
+        def augmented_rmatvec(value):
+            value = np.asarray(value, dtype=np.complex128).reshape(-1)
+            result = np.empty(size + 1, dtype=np.complex128)
+            result[:size] = generator.matvec(value[:size])
+            result[size] = np.vdot(vector, value[:size])
+            return result
+
+        augmented = LinearOperator(
+            (size + 1, size + 1),
+            dtype=np.complex128,
+            matvec=augmented_matvec,
+            rmatvec=augmented_rmatvec,
+        )
+        seed = np.zeros(size + 1, dtype=np.complex128)
+        seed[size] = 1.0
+        integrated = np.asarray(
+            expm_multiply((stop - start) * augmented, seed, traceA=0.0),
+            dtype=np.complex128,
+        )[:size]
+        if start > 0.0:
+            heisenberg = LinearOperator(
+                (size, size),
+                dtype=np.complex128,
+                matvec=generator.rmatvec,
+                rmatvec=generator.matvec,
+            )
+            integrated = np.asarray(
+                expm_multiply(start * heisenberg, integrated, traceA=0.0),
+                dtype=np.complex128,
+            )
+        self._integrated_detector_cache[key] = integrated
+        return integrated
+
+    def _solve_excess_integral(self, right_hand_side, rho_ss, identity):
+        """GMRES on ``L^dagger - |1>><<rho_ss|``, as stiff as the relaxation gap of the generator."""
+        size = right_hand_side.size
+        generator = self._liouville
+        operator = LinearOperator(
+            (size, size),
+            dtype=np.complex128,
+            matvec=lambda value: generator.rmatvec(value) - identity * np.vdot(rho_ss, value),
+        )
+        solution, info = gmres(
+            operator,
+            right_hand_side,
+            rtol=self.krylov_tolerance,
+            atol=0.0,
+            restart=min(100, size),
+            maxiter=100 if self.krylov_maxiter is None else self.krylov_maxiter,
+        )
+        if info != 0:
+            raise ConvergenceError(
+                "GMRES did not converge for the infinite-window count: the relaxation gap of the generator is "
+                "probably too small for this solver, or the stationary state is not unique. Raise krylov_maxiter, "
+                "use the dense backend for a small model, or use a finite window."
+            )
+        return solution
+
+    def _evolve_adjoint(self, vector, time):
+        heisenberg = LinearOperator(
+            (vector.size, vector.size),
+            dtype=np.complex128,
+            matvec=self._liouville.rmatvec,
+            rmatvec=self._liouville.matvec,
+        )
+        return expm_multiply(time * heisenberg, vector, traceA=0.0)
+
+    def _integrated_jump_trapezoid(self, response, spec):
+        """Legacy quadrature over n_steps samples of the window."""
+        start, stop = spec.time_window
+        times = np.linspace(start, stop, spec.n_steps)
+        detector = spec.instantaneous().without_projection()
+        samples = []
+        for time in times:
+            value = 0.0j
+            for projected, prefactor in self._projection_branches(
+                response, spec
+            ):
+                propagated = self._propagate_liouville(projected, time)
+                value += prefactor * self._detect_density(
+                    propagated, detector
+                )
+            samples.append(value)
+        return np.trapezoid(np.asarray(samples, dtype=np.complex128), times)
+
     def _integrated_jump_values(self, response, observables):
         values = {}
         for spec in observables:
-            start, stop = spec.time_window
-            times = np.linspace(start, stop, spec.n_steps)
-            detector = spec.instantaneous().without_projection()
-            samples = []
-            for time in times:
-                value = 0.0j
+            if spec.integration == "trapezoid":
+                values[spec.name] = self._integrated_jump_trapezoid(
+                    response, spec
+                )
+                continue
+            detector = self._integrated_detector(spec)
+            value = sum(
+                prefactor * np.vdot(detector, projected)
                 for projected, prefactor in self._projection_branches(
                     response, spec
-                ):
-                    propagated = self._propagate_liouville(projected, time)
-                    value += prefactor * self._detect_density(
-                        propagated, detector
-                    )
-                samples.append(value)
-            values[spec.name] = np.trapezoid(
-                np.asarray(samples, dtype=np.complex128), times
+                )
             )
+            values[spec.name] = spec.efficiency * value
         return values
 
     def calc_pathway_observables(
@@ -317,6 +715,7 @@ class SparseSectorBackend(BackendBase):
         """One pathway propagation -> responses for multiple observables."""
         protocol.validate_pathway(pathway)
         protocol.validate_coordinates(coordinates)
+        self._check_transition_operators(pathway)
         specs = tuple(observables)
         integrated = [
             spec for spec in specs if spec.kind == "integrated_jump"
@@ -458,6 +857,20 @@ class SparseSectorBackend(BackendBase):
         shift = complex(float(omega), eta)
         dimension = self.layout.total_dimension
 
+        if self._hilbert_diagonal_active:
+            denominator = shift - self._hamiltonian_diagonal
+            if not np.all(np.abs(denominator) > 0):
+                raise ConvergenceError("The shifted Hamiltonian is singular at this frequency (eta = 0 on a pole).")
+            return vector / denominator, {
+                "method": "diagonal",
+                "gmres_info": 0,
+                "iterations": 0,
+                "residual_norm": 0.0,
+                "relative_residual": 0.0,
+                "omega": float(omega),
+                "eta": eta,
+            }
+
         operator = LinearOperator(
             (dimension, dimension),
             dtype=np.complex128,
@@ -466,19 +879,23 @@ class SparseSectorBackend(BackendBase):
             rmatvec=lambda value: np.conj(shift) * value
             - self._hamiltonian.rmatvec(value),
         )
-        solution, info = gmres(
-            operator,
-            vector,
-            x0=initial_guess,
-            rtol=self.krylov_tolerance,
-            atol=0.0,
-            restart=self.resolvent_restart,
-            maxiter=self.krylov_maxiter,
+        preconditioner = (
+            None
+            if self._hamiltonian_diagonal is None
+            else self._diagonal_preconditioner(
+                shift - self._hamiltonian_diagonal
+            )
+        )
+        solution, info, iterations = self._gmres(
+            operator, vector, preconditioner, initial_guess=initial_guess
         )
         residual = float(np.linalg.norm(operator @ solution - vector))
+        norm = float(np.linalg.norm(vector))
         diagnostics = {
             "gmres_info": int(info),
+            "iterations": iterations,
             "residual_norm": residual,
+            "relative_residual": residual / norm if norm > 0 else 0.0,
             "omega": float(omega),
             "eta": eta,
         }

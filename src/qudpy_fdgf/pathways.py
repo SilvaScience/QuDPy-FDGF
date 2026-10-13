@@ -7,11 +7,17 @@ UFSS as a runtime dependency.
 """
 
 from dataclasses import dataclass
+import itertools
 
 
 _COHERENCE_CHANGE = {"Ku": 1, "Kd": -1, "Bu": -1, "Bd": 1}
 _KET_LABELS = {"Ku", "Kd"}
 _BRA_LABELS = {"Bu", "Bd"}
+# Wave-vector sign s_j of pulse j for each label (s_j = Delta q_j) and the labels that carry it.
+_LABELS_BY_SIGN = {1: ("Ku", "Bd"), -1: ("Kd", "Bu")}
+# k = -k1 + k2 + k3 (rephasing) and k = +k1 - k2 + k3 (non-rephasing), third order.
+_STANDARD_SIGNATURES = {"rephasing": (-1, 1, 1), "unrephasing": (1, -1, 1)}
+_SIGN_SYMBOLS = {"+": 1, "-": -1, "\u2212": -1}
 
 
 @dataclass(frozen=True)
@@ -48,9 +54,28 @@ class Interaction:
         return "plus" if self.label in {"Ku", "Bu"} else "minus"
 
     @property
+    def sign(self):
+        """Wave-vector sign s_j of the pulse for this label (equal to its coherence change)."""
+        return _COHERENCE_CHANGE[self.label]
+
+    @property
     def perturbative_prefactor(self):
         """Return this interaction's pathway-prefactor contribution."""
         return 1j * (-1 if self.side == "bra" else 1)
+
+
+def _label_of(interaction):
+    return interaction.label if isinstance(interaction, Interaction) else str(interaction)
+
+
+def pathway_signature(interactions):
+    """Ordered interactions -> signature ``(s_1, ..., s_n)`` of wave-vector signs.
+
+    ``s_j = +1`` for ``Ku`` and ``Bd`` and ``-1`` for ``Kd`` and ``Bu``, so that the signal is
+    radiated in the direction ``sum_j s_j k_j``. Rephasing is ``(-1, +1, +1)`` and
+    non-rephasing ``(+1, -1, +1)`` at third order.
+    """
+    return tuple(_COHERENCE_CHANGE[_label_of(item)] for item in interactions)
 
 
 def coherence_orders_from_interactions(interactions):
@@ -79,6 +104,9 @@ class FrequencyPathway:
     prefactor: complex | None = None
     coherence_orders: tuple = ()
     detection: str = "polarization"
+    # "user" for a pathway written by hand; "enumerated" and "ufss" for generated lists, whose
+    # zero members are expected and are not reported as errors.
+    origin: str = "user"
 
     def __post_init__(self):
         interactions = tuple(
@@ -105,14 +133,29 @@ class FrequencyPathway:
         component = str(self.component).lower().replace("-", "")
         if component in {"nonrephasing", "nonrephase"}:
             component = "unrephasing"
+        signature = pathway_signature(interactions)
+        standard = _STANDARD_SIGNATURES.get(component)
+        if standard is not None and len(signature) == len(standard) and signature != standard:
+            raise ValueError(
+                f"Pathway {self.name!r} is declared as component {component!r} "
+                f"(signature {standard}), but its interactions have signature {signature}. "
+                "Summing pathways of different signatures into one component mixes phase-matching "
+                "directions; use another component name for a custom grouping."
+            )
         object.__setattr__(self, "name", str(self.name))
         object.__setattr__(self, "interactions", interactions)
         object.__setattr__(self, "coherence_orders", coherence_orders)
         object.__setattr__(self, "component", component)
+        object.__setattr__(self, "origin", str(self.origin))
         object.__setattr__(self, "amplitude", complex(self.amplitude))
         object.__setattr__(self, "detection", str(self.detection))
         if self.prefactor is not None:
             object.__setattr__(self, "prefactor", complex(self.prefactor))
+
+    @property
+    def signature(self):
+        """Signature ``(s_1, ..., s_n)`` of wave-vector signs (see ``pathway_signature``)."""
+        return pathway_signature(self.interactions)
 
     @property
     def bra_sign(self):
@@ -137,7 +180,9 @@ class FrequencyPathway:
             "prefactor": self.prefactor,
             "response_prefactor": self.response_prefactor,
             "coherence_orders": self.coherence_orders,
+            "signature": self.signature,
             "detection": self.detection,
+            "origin": self.origin,
             "interactions": tuple(
                 {
                     "label": item.label,
@@ -202,6 +247,76 @@ def translate_ufss_diagrams(
                 amplitude=amplitude,
                 prefactor=prefactor,
                 detection=detection,
+                origin="ufss",
             )
         )
+    return pathways
+
+
+def _parse_signature(signature):
+    if isinstance(signature, str):
+        symbols = [char for char in signature if char not in " ,()[]"]
+        try:
+            values = tuple(_SIGN_SYMBOLS[char] for char in symbols)
+        except KeyError as exc:
+            raise ValueError(
+                f"Unknown sign {exc.args[0]!r} in signature {signature!r}; use '+' and '-'."
+            ) from exc
+    else:
+        values = tuple(int(item) for item in signature)
+    if not values or any(item not in (1, -1) for item in values):
+        raise ValueError(
+            "A signature is a non-empty sequence of +1 and -1 (or a string of '+' and '-')."
+        )
+    return values
+
+
+def pathways_from_signature(
+    signature,
+    *,
+    component="custom",
+    detection="polarization",
+    operator="light_matter",
+    max_manifold=None,
+    min_manifold=None,
+):
+    """Signature -> every Liouville pathway with that wave-vector signature.
+
+    Pulse ``j`` with sign ``s_j = +1`` can act as ``Ku`` or ``Bd`` and with ``s_j = -1`` as
+    ``Kd`` or ``Bu``: the ``2**n`` ordered label sequences are returned, named after their labels
+    (``"Bu-Ku-Bd"``) and marked ``origin="enumerated"``. Those that the model does not allow
+    vanish when the spectrum is computed (``SpectrumResult.null_pathways()`` lists them), so the
+    set is complete by construction, including the sequences that only a thermal reference state
+    or a population transfer makes non-zero.
+
+    ``max_manifold`` and ``min_manifold`` reproduce the rule 4(a) of the UFSS diagram generator:
+    ket and bra manifold indices start at 0 and a sequence is dropped when one leaves
+    ``[min_manifold, max_manifold]``. This is valid for a ground-state reference state without
+    relaxation between manifolds only; with relaxation or thermal populations, leave both
+    ``None``.
+    """
+    signs = _parse_signature(signature)
+    low = -float("inf") if min_manifold is None else min_manifold
+    high = float("inf") if max_manifold is None else max_manifold
+    step = {"Ku": (1, 0), "Kd": (-1, 0), "Bu": (0, 1), "Bd": (0, -1)}
+    pathways = []
+    for labels in itertools.product(*(_LABELS_BY_SIGN[sign] for sign in signs)):
+        ket = bra = 0
+        allowed = True
+        for label in labels:
+            ket += step[label][0]
+            bra += step[label][1]
+            if not (low <= ket <= high and low <= bra <= high):
+                allowed = False
+                break
+        if allowed:
+            pathways.append(
+                FrequencyPathway(
+                    name="-".join(labels),
+                    interactions=tuple(Interaction(label, operator=operator) for label in labels),
+                    component=component,
+                    detection=detection,
+                    origin="enumerated",
+                )
+            )
     return pathways

@@ -651,7 +651,7 @@ class SpectroscopyPlotter:
         return self.plot_spectrum_result(result, config)
 
     def plot_spectrum_result_contours(self, result, params=None, **overrides):
-        """Explicit alias matching the V9 plotter API."""
+        """Explicit alias of ``plot_spectrum_result``."""
         return self.plot_spectrum_result(result, params, **overrides)
 
     def plot_pathways_multiorder(
@@ -668,7 +668,7 @@ class SpectroscopyPlotter:
         show=True,
         **kwargs,
     ):
-        """V9-compatible wrapper for selected pathway panels."""
+        """Plot selected pathway panels with explicit keyword arguments (wrapper of ``plot_spectrum_result``)."""
         config = {
             "source": "pathways",
             "pathways": pathways,

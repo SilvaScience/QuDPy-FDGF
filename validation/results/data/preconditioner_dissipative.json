@@ -1,0 +1,590 @@
+{
+  "chain3": {
+    "rows": [
+      {
+        "scenario": "three-site chain, dissipation x0.1",
+        "scale": 0.1,
+        "eta": 0.002,
+        "plain": {
+          "iterations_mean": 195.94444444444446,
+          "iterations_max": 1680,
+          "ms_per_solve": 41.79376111116855,
+          "relative_residual_max": 9.888821821813778e-11
+        },
+        "diagonal": {
+          "iterations_mean": 3.5555555555555554,
+          "iterations_max": 7,
+          "ms_per_solve": 0.9609888887401515,
+          "relative_residual_max": 5.841017993565747e-11
+        },
+        "iteration_ratio": 0.018145732917493617,
+        "time_ratio": 0.022993596728085486
+      },
+      {
+        "scenario": "three-site chain, dissipation x0.1",
+        "scale": 0.1,
+        "eta": 0.0002,
+        "plain": {
+          "iterations_mean": 366.27777777777777,
+          "iterations_max": 4640,
+          "ms_per_solve": 77.1631777776444,
+          "relative_residual_max": 9.888454951591247e-11
+        },
+        "diagonal": {
+          "iterations_mean": 3.6666666666666665,
+          "iterations_max": 9,
+          "ms_per_solve": 1.0817777777750355,
+          "relative_residual_max": 5.841024157121725e-11
+        },
+        "iteration_ratio": 0.010010617321401486,
+        "time_ratio": 0.01401935235083652
+      },
+      {
+        "scenario": "three-site chain, dissipation x1",
+        "scale": 1,
+        "eta": 0.002,
+        "plain": {
+          "iterations_mean": 158.05555555555554,
+          "iterations_max": 869,
+          "ms_per_solve": 34.16243888892091,
+          "relative_residual_max": 9.989335256203794e-11
+        },
+        "diagonal": {
+          "iterations_mean": 5.5,
+          "iterations_max": 12,
+          "ms_per_solve": 1.3416944445149663,
+          "relative_residual_max": 2.6584070163778973e-11
+        },
+        "iteration_ratio": 0.03479789103690686,
+        "time_ratio": 0.039273965447182584
+      },
+      {
+        "scenario": "three-site chain, dissipation x1",
+        "scale": 1,
+        "eta": 0.0002,
+        "plain": {
+          "iterations_mean": 173.0,
+          "iterations_max": 1012,
+          "ms_per_solve": 37.05600555541524,
+          "relative_residual_max": 9.865818206626551e-11
+        },
+        "diagonal": {
+          "iterations_mean": 5.5,
+          "iterations_max": 12,
+          "ms_per_solve": 1.308555555523425,
+          "relative_residual_max": 2.8210836611437934e-11
+        },
+        "iteration_ratio": 0.031791907514450865,
+        "time_ratio": 0.03531291449011015
+      },
+      {
+        "scenario": "three-site chain, dissipation x10",
+        "scale": 10,
+        "eta": 0.002,
+        "plain": {
+          "iterations_mean": 38.5,
+          "iterations_max": 143,
+          "ms_per_solve": 8.197144444339857,
+          "relative_residual_max": 9.556931545666098e-11
+        },
+        "diagonal": {
+          "iterations_mean": 7.333333333333333,
+          "iterations_max": 15,
+          "ms_per_solve": 1.733461111143697,
+          "relative_residual_max": 8.208640406759934e-11
+        },
+        "iteration_ratio": 0.19047619047619047,
+        "time_ratio": 0.21147133894177686
+      },
+      {
+        "scenario": "three-site chain, dissipation x10",
+        "scale": 10,
+        "eta": 0.0002,
+        "plain": {
+          "iterations_mean": 38.666666666666664,
+          "iterations_max": 144,
+          "ms_per_solve": 8.181705555519633,
+          "relative_residual_max": 9.906670725425476e-11
+        },
+        "diagonal": {
+          "iterations_mean": 7.333333333333333,
+          "iterations_max": 15,
+          "ms_per_solve": 1.6912277779839415,
+          "relative_residual_max": 8.885891123565275e-11
+        },
+        "iteration_ratio": 0.1896551724137931,
+        "time_ratio": 0.20670846274136406
+      },
+      {
+        "scenario": "three-site chain, dissipation x100",
+        "scale": 100,
+        "eta": 0.002,
+        "plain": {
+          "iterations_mean": 23.055555555555557,
+          "iterations_max": 68,
+          "ms_per_solve": 5.028322222238381,
+          "relative_residual_max": 8.917389219203729e-11
+        },
+        "diagonal": {
+          "iterations_mean": 10.277777777777779,
+          "iterations_max": 20,
+          "ms_per_solve": 2.3151500002616863,
+          "relative_residual_max": 9.532670476222393e-11
+        },
+        "iteration_ratio": 0.4457831325301205,
+        "time_ratio": 0.4604219654068006
+      },
+      {
+        "scenario": "three-site chain, dissipation x100",
+        "scale": 100,
+        "eta": 0.0002,
+        "plain": {
+          "iterations_mean": 23.055555555555557,
+          "iterations_max": 68,
+          "ms_per_solve": 4.964355555582895,
+          "relative_residual_max": 9.169155601888858e-11
+        },
+        "diagonal": {
+          "iterations_mean": 10.277777777777779,
+          "iterations_max": 20,
+          "ms_per_solve": 2.3359055558103137,
+          "relative_residual_max": 9.665744423253382e-11
+        },
+        "iteration_ratio": 0.4457831325301205,
+        "time_ratio": 0.47053550650363135
+      },
+      {
+        "scenario": "three-site chain, dissipation x1000",
+        "scale": 1000,
+        "eta": 0.002,
+        "plain": {
+          "iterations_mean": 19.055555555555557,
+          "iterations_max": 49,
+          "ms_per_solve": 4.185594444101702,
+          "relative_residual_max": 9.856507631976566e-11
+        },
+        "diagonal": {
+          "iterations_mean": 14.444444444444445,
+          "iterations_max": 31,
+          "ms_per_solve": 3.2611166667872262,
+          "relative_residual_max": 4.651875559569685e-11
+        },
+        "iteration_ratio": 0.7580174927113702,
+        "time_ratio": 0.7791286782174416
+      },
+      {
+        "scenario": "three-site chain, dissipation x1000",
+        "scale": 1000,
+        "eta": 0.0002,
+        "plain": {
+          "iterations_mean": 19.055555555555557,
+          "iterations_max": 49,
+          "ms_per_solve": 4.194783333433508,
+          "relative_residual_max": 9.867400643847824e-11
+        },
+        "diagonal": {
+          "iterations_mean": 14.444444444444445,
+          "iterations_max": 31,
+          "ms_per_solve": 3.1761111111134395,
+          "relative_residual_max": 4.6673586436682786e-11
+        },
+        "iteration_ratio": 0.7580174927113702,
+        "time_ratio": 0.7571573687248666
+      }
+    ],
+    "worst_iteration_ratio": 0.7580174927113702,
+    "best_iteration_ratio": 0.010010617321401486
+  },
+  "collective": {
+    "rows": [
+      {
+        "scenario": "XXZ L=6, collective decay 0.001 meV",
+        "rate_meV": 0.001,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 1452.7777777777778,
+          "iterations_max": 3707,
+          "ms_per_solve": 440.7783777771531,
+          "relative_residual_max": 9.980921279787634e-11
+        },
+        "diagonal": {
+          "iterations_mean": 3.6666666666666665,
+          "iterations_max": 5,
+          "ms_per_solve": 1.4607666671508923,
+          "relative_residual_max": 3.901256802760246e-11
+        },
+        "iteration_ratio": 0.0025239005736137667,
+        "time_ratio": 0.003314061534772971
+      },
+      {
+        "scenario": "XXZ L=6, collective decay 0.001 meV",
+        "rate_meV": 0.001,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 12724.888888888889,
+          "iterations_max": 33932,
+          "ms_per_solve": 3872.431466666361,
+          "relative_residual_max": 9.998833616746234e-11
+        },
+        "diagonal": {
+          "iterations_mean": 4.0,
+          "iterations_max": 5,
+          "ms_per_solve": 1.544277777106294,
+          "relative_residual_max": 1.402953225720263e-11
+        },
+        "iteration_ratio": 0.0003143445915266669,
+        "time_ratio": 0.0003987876326280625
+      },
+      {
+        "scenario": "XXZ L=6, collective decay 0.01 meV",
+        "rate_meV": 0.01,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 1388.3333333333333,
+          "iterations_max": 3573,
+          "ms_per_solve": 424.2689333332237,
+          "relative_residual_max": 9.970875728272442e-11
+        },
+        "diagonal": {
+          "iterations_mean": 5.333333333333333,
+          "iterations_max": 7,
+          "ms_per_solve": 1.924966666491754,
+          "relative_residual_max": 8.11758350649386e-11
+        },
+        "iteration_ratio": 0.0038415366146458585,
+        "time_ratio": 0.004537137921856447
+      },
+      {
+        "scenario": "XXZ L=6, collective decay 0.01 meV",
+        "rate_meV": 0.01,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 10974.222222222223,
+          "iterations_max": 30576,
+          "ms_per_solve": 3356.112866666485,
+          "relative_residual_max": 9.998451748686618e-11
+        },
+        "diagonal": {
+          "iterations_mean": 5.777777777777778,
+          "iterations_max": 8,
+          "ms_per_solve": 2.149555555661209,
+          "relative_residual_max": 3.96334999494476e-11
+        },
+        "iteration_ratio": 0.0005264863113559048,
+        "time_ratio": 0.0006404896500981777
+      },
+      {
+        "scenario": "XXZ L=6, collective decay 0.1 meV",
+        "rate_meV": 0.1,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 1299.4444444444443,
+          "iterations_max": 3425,
+          "ms_per_solve": 392.94601111113377,
+          "relative_residual_max": 9.96371233749841e-11
+        },
+        "diagonal": {
+          "iterations_mean": 9.0,
+          "iterations_max": 12,
+          "ms_per_solve": 3.0136555554539277,
+          "relative_residual_max": 4.3837124088935275e-11
+        },
+        "iteration_ratio": 0.006926036767849509,
+        "time_ratio": 0.0076693883389532605
+      },
+      {
+        "scenario": "XXZ L=6, collective decay 0.1 meV",
+        "rate_meV": 0.1,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 7158.777777777777,
+          "iterations_max": 21782,
+          "ms_per_solve": 2151.138211110568,
+          "relative_residual_max": 9.99659158059174e-11
+        },
+        "diagonal": {
+          "iterations_mean": 9.555555555555555,
+          "iterations_max": 13,
+          "ms_per_solve": 3.3096111114395574,
+          "relative_residual_max": 6.911271935064343e-11
+        },
+        "iteration_ratio": 0.0013348026509801486,
+        "time_ratio": 0.0015385395017137949
+      },
+      {
+        "scenario": "XXZ L=6, collective decay 1 meV",
+        "rate_meV": 1.0,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 1305.5555555555557,
+          "iterations_max": 3634,
+          "ms_per_solve": 397.83391111106744,
+          "relative_residual_max": 9.990053975946967e-11
+        },
+        "diagonal": {
+          "iterations_mean": 19.444444444444443,
+          "iterations_max": 34,
+          "ms_per_solve": 6.174322222553504,
+          "relative_residual_max": 7.861049445075456e-11
+        },
+        "iteration_ratio": 0.014893617021276593,
+        "time_ratio": 0.01551984898750814
+      },
+      {
+        "scenario": "XXZ L=6, collective decay 1 meV",
+        "rate_meV": 1.0,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 6378.222222222223,
+          "iterations_max": 23815,
+          "ms_per_solve": 1954.4379666670768,
+          "relative_residual_max": 9.998027978943562e-11
+        },
+        "diagonal": {
+          "iterations_mean": 22.11111111111111,
+          "iterations_max": 39,
+          "ms_per_solve": 7.359711111348588,
+          "relative_residual_max": 8.928895332870836e-11
+        },
+        "iteration_ratio": 0.003466657375792627,
+        "time_ratio": 0.003765640678736496
+      },
+      {
+        "scenario": "XXZ L=6, collective decay 10 meV",
+        "rate_meV": 10.0,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 2157.3333333333335,
+          "iterations_max": 6264,
+          "ms_per_solve": 658.9212222226909,
+          "relative_residual_max": 9.988287256697372e-11
+        },
+        "diagonal": {
+          "iterations_mean": 132.33333333333334,
+          "iterations_max": 368,
+          "ms_per_solve": 41.05100000015227,
+          "relative_residual_max": 9.884005305994059e-11
+        },
+        "iteration_ratio": 0.061341161928306555,
+        "time_ratio": 0.06230031544845062
+      },
+      {
+        "scenario": "XXZ L=6, collective decay 10 meV",
+        "rate_meV": 10.0,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 15180.333333333334,
+          "iterations_max": 54059,
+          "ms_per_solve": 4573.88863333391,
+          "relative_residual_max": 9.999758149478552e-11
+        },
+        "diagonal": {
+          "iterations_mean": 334.0,
+          "iterations_max": 1114,
+          "ms_per_solve": 103.94433333325044,
+          "relative_residual_max": 9.917935464700058e-11
+        },
+        "iteration_ratio": 0.022002151907072748,
+        "time_ratio": 0.022725593398955444
+      }
+    ],
+    "worst_iteration_ratio": 0.061341161928306555,
+    "best_iteration_ratio": 0.0003143445915266669
+  },
+  "local": {
+    "rows": [
+      {
+        "scenario": "XXZ L=6, local dephasing 0.001 meV",
+        "rate_meV": 0.001,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 1406.2222222222222,
+          "iterations_max": 3585,
+          "ms_per_solve": 1452.6797333334496,
+          "relative_residual_max": 9.991063663507566e-11
+        },
+        "diagonal": {
+          "iterations_mean": 4.555555555555555,
+          "iterations_max": 6,
+          "ms_per_solve": 6.367022222548258,
+          "relative_residual_max": 1.754901254117138e-11
+        },
+        "iteration_ratio": 0.0032395701643489253,
+        "time_ratio": 0.004382949714551269
+      },
+      {
+        "scenario": "XXZ L=6, local dephasing 0.001 meV",
+        "rate_meV": 0.001,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 9443.666666666666,
+          "iterations_max": 24984,
+          "ms_per_solve": 9728.891222221944,
+          "relative_residual_max": 9.996813895752485e-11
+        },
+        "diagonal": {
+          "iterations_mean": 5.222222222222222,
+          "iterations_max": 7,
+          "ms_per_solve": 6.919122221814986,
+          "relative_residual_max": 3.997977009832376e-12
+        },
+        "iteration_ratio": 0.0005529867165531279,
+        "time_ratio": 0.000711193296725416
+      },
+      {
+        "scenario": "XXZ L=6, local dephasing 0.01 meV",
+        "rate_meV": 0.01,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 1082.0,
+          "iterations_max": 2798,
+          "ms_per_solve": 1116.6276222219394,
+          "relative_residual_max": 9.961606109170795e-11
+        },
+        "diagonal": {
+          "iterations_mean": 7.333333333333333,
+          "iterations_max": 11,
+          "ms_per_solve": 8.881622222058164,
+          "relative_residual_max": 3.201852472290812e-11
+        },
+        "iteration_ratio": 0.006777572396796056,
+        "time_ratio": 0.007953969654077629
+      },
+      {
+        "scenario": "XXZ L=6, local dephasing 0.01 meV",
+        "rate_meV": 0.01,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 3144.222222222222,
+          "iterations_max": 9018,
+          "ms_per_solve": 3194.462600000002,
+          "relative_residual_max": 9.987363021793467e-11
+        },
+        "diagonal": {
+          "iterations_mean": 8.11111111111111,
+          "iterations_max": 14,
+          "ms_per_solve": 9.728344444334247,
+          "relative_residual_max": 5.919581526308987e-11
+        },
+        "iteration_ratio": 0.0025796876104318325,
+        "time_ratio": 0.003045377474237526
+      },
+      {
+        "scenario": "XXZ L=6, local dephasing 0.1 meV",
+        "rate_meV": 0.1,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 453.77777777777777,
+          "iterations_max": 1192,
+          "ms_per_solve": 464.09335555492567,
+          "relative_residual_max": 9.962541397187799e-11
+        },
+        "diagonal": {
+          "iterations_mean": 13.777777777777779,
+          "iterations_max": 22,
+          "ms_per_solve": 15.53382222239937,
+          "relative_residual_max": 7.961151171982413e-11
+        },
+        "iteration_ratio": 0.030362389813907934,
+        "time_ratio": 0.033471330792541235
+      },
+      {
+        "scenario": "XXZ L=6, local dephasing 0.1 meV",
+        "rate_meV": 0.1,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 640.5555555555555,
+          "iterations_max": 1785,
+          "ms_per_solve": 656.3775666662776,
+          "relative_residual_max": 9.978380193398354e-11
+        },
+        "diagonal": {
+          "iterations_mean": 15.0,
+          "iterations_max": 27,
+          "ms_per_solve": 16.63518888946985,
+          "relative_residual_max": 7.667657408177462e-11
+        },
+        "iteration_ratio": 0.02341717259323504,
+        "time_ratio": 0.02534393272146622
+      },
+      {
+        "scenario": "XXZ L=6, local dephasing 1 meV",
+        "rate_meV": 1.0,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 86.88888888888889,
+          "iterations_max": 214,
+          "ms_per_solve": 88.71195555548184,
+          "relative_residual_max": 9.889526361970711e-11
+        },
+        "diagonal": {
+          "iterations_mean": 28.22222222222222,
+          "iterations_max": 46,
+          "ms_per_solve": 30.352155555091386,
+          "relative_residual_max": 7.808457121407684e-11
+        },
+        "iteration_ratio": 0.3248081841432225,
+        "time_ratio": 0.3421427852090204
+      },
+      {
+        "scenario": "XXZ L=6, local dephasing 1 meV",
+        "rate_meV": 1.0,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 90.66666666666667,
+          "iterations_max": 225,
+          "ms_per_solve": 92.90314444418375,
+          "relative_residual_max": 9.939803648400525e-11
+        },
+        "diagonal": {
+          "iterations_mean": 28.77777777777778,
+          "iterations_max": 47,
+          "ms_per_solve": 31.510833333110593,
+          "relative_residual_max": 9.944845716665085e-11
+        },
+        "iteration_ratio": 0.3174019607843137,
+        "time_ratio": 0.3391794058385431
+      },
+      {
+        "scenario": "XXZ L=6, local dephasing 10 meV",
+        "rate_meV": 10.0,
+        "eta": 0.03,
+        "plain": {
+          "iterations_mean": 33.111111111111114,
+          "iterations_max": 69,
+          "ms_per_solve": 34.79688888910459,
+          "relative_residual_max": 9.720710383969422e-11
+        },
+        "diagonal": {
+          "iterations_mean": 39.888888888888886,
+          "iterations_max": 80,
+          "ms_per_solve": 41.79267777767058,
+          "relative_residual_max": 9.776902502883834e-11
+        },
+        "iteration_ratio": 1.204697986577181,
+        "time_ratio": 1.2010463898327552
+      },
+      {
+        "scenario": "XXZ L=6, local dephasing 10 meV",
+        "rate_meV": 10.0,
+        "eta": 0.003,
+        "plain": {
+          "iterations_mean": 33.22222222222222,
+          "iterations_max": 70,
+          "ms_per_solve": 34.973499999776124,
+          "relative_residual_max": 8.883805060209117e-11
+        },
+        "diagonal": {
+          "iterations_mean": 40.77777777777778,
+          "iterations_max": 88,
+          "ms_per_solve": 44.10786666671306,
+          "relative_residual_max": 9.87038699830271e-11
+        },
+        "iteration_ratio": 1.2274247491638797,
+        "time_ratio": 1.2611796550815733
+      }
+    ],
+    "worst_iteration_ratio": 1.2274247491638797,
+    "best_iteration_ratio": 0.0005529867165531279
+  }
+}

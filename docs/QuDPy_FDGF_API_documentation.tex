@@ -1,0 +1,1504 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{physics}
+\newcommand{\kket}[1]{|#1\rangle\!\rangle}
+%% Pointers to the article (companion manuscript). The numbers are written here only. This file is also
+%% compiled alone in the code repository, so it does not read the aux file of the article: when the
+%% article is renumbered, edit this block and nothing else.
+\newcommand{\ArtSecUsage}{4}           % Program usage
+\newcommand{\ArtSecResolvent}{2.4}     % propagator and resolvent
+\newcommand{\ArtSecScope}{2.10}        % scope and approximations (phase covariance)
+\newcommand{\ArtSecPerformance}{6}     % validation and performance
+\newcommand{\ArtSISecScaling}{S5}      % Supplementary Material: cost versus Hilbert-space dimension
+\usepackage{bbold}
+\usepackage{booktabs}
+\usepackage{underscore}   % \_ in \texttt{} (file and code names) may be broken at line ends
+\usepackage[hidelinks]{hyperref}
+
+\title{QuDPy-FDGF Solver API and Implementation Reference}
+\author{Mathieu Desmarais, Sim\'on Paiva-Ortega, F\'elix Brunelle,\\ Hao Li, Eric R. Bittner, Carlos Silva-Acu\~{n}a}
+\date{Software version 1.0.0}
+
+\begin{document}
+
+\sloppy
+
+\maketitle
+
+\begin{abstract}
+This document collects the software-facing reference material for the QuDPy-FDGF solver. It describes the model contracts, public solver operations, observable specifications, pathway objects, numerical backends, and plotting utilities. The scientific manuscript contains the mathematical formulation, validation benchmarks, and physical examples; this companion document records API details that may evolve with the software.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section*{Notation and conventions}
+The notation follows the companion manuscript. Operators on the Hilbert space carry hats ($\hat{H}$, $\hat{\rho}$, $\hat\mu$, $\hat L_c$, $\hat{O}$); calligraphic symbols denote superoperators ($\mathcal{L}$, $\mathcal{U}$, $\mathcal{R}_\eta$, $\mathcal{V}$, $\mathcal{D}_c$), and the same symbol denotes a superoperator and its matrix acting on the column-stacked vector $\operatorname{vec}(\hat{\rho})=\kket{\hat{\rho}}$; $\mathbb{1}$ is the identity. Dissipative channels are labeled by $c$, with jump operator $\hat L_c$, dissipator $\mathcal{D}_c[\hat\rho]=\hat L_c\hat\rho\hat L_c^\dagger-\frac{1}{2}\{\hat L_c^\dagger\hat L_c,\hat\rho\}$, and rate $\gamma_c$ kept separate: $\mathcal{L}[\hat\rho]=-i[\hat H,\hat\rho]+\sum_c\gamma_c\mathcal{D}_c[\hat\rho]$. The rate $\gamma_c$ is the Lindblad coefficient, not necessarily a measured rate: a pure-dephasing rate $\gamma_\phi=1/T_2^*$ requires $\gamma_c=\gamma_\phi/2$ for $\hat L_c=\hat\sigma_z$ and $\gamma_c=2\gamma_\phi$ for a projector $\ket{e}\bra{e}$ (Sec.~\ref{sec:quick-start}). The raising and lowering parts of the light--matter operator are $\hat\mu_\pm$; in the software interface they are supplied as the transition blocks $J_\pm$ (\texttt{j\_plus\_array}, \texttt{j\_minus\_array}). The pathway prefactor is $c_p$ and the detection efficiency $\varepsilon_{\mathrm{det}}$; $\eta$ is reserved for the resolvent regularization. Energies and frequencies share one unit, $\hbar=1$ (eV in the examples).
+
+
+\section{Quick start}
+\label{sec:quick-start}
+
+\subsection{Installation}
+QuDPy-FDGF requires Python~$\geq 3.13$. The distribution is named \texttt{qudpy-fdgf} and the import name is \texttt{qudpy\_fdgf}. From a clone of the repository, install it in editable mode:
+\begin{verbatim}
+git clone https://github.com/SilvaScience/QuDPy-FDGF.git
+cd QuDPy-FDGF
+pip install -e .              # core: NumPy, SciPy, Matplotlib
+pip install -e ".[examples]"  # optional: QuTiP, UFSS, IPython (notebooks)
+pip install -e ".[dev]"       # optional: pytest
+\end{verbatim}
+The core dependencies are NumPy~$\geq 2.5$, SciPy~$\geq 1.18$, and Matplotlib~$\geq 3.11$, the versions with which the test suite was run; Matplotlib is used only by \texttt{SpectroscopyPlotter}. QuTiP is used by the example notebooks to build operators, and \texttt{ufss.DiagramGenerator} generates the fifth-order pathways of the closed limit of Example~2. The prototypes of the folder \texttt{prototypes/} (low-rank backend, TeNPy engines) are not installed and are not part of this release. The reference output below was obtained with Python~3.13.14, NumPy~2.5.0, SciPy~1.18.0, and Matplotlib~3.11.0 on Windows~11; other platforms were not tested.
+
+\subsection{A complete calculation}
+The script below treats an open two-level system with transition energy $2~\mathrm{eV}$, radiative decay at rate $\gamma_1$, and pure dephasing at rate $\gamma_\phi$. It performs the five steps common to every calculation: build the matrices, adapt them to the model contract, feed the model to the solver, declare the pathways and the protocol, and generate the spectrum.
+% Distributed as examples/old_scripts/quickstart.py.
+\begin{verbatim}
+import numpy as np
+from qudpy_fdgf import EigenbasisKModel, FrequencyPathway, SpectroscopySolver
+from qudpy_fdgf.protocols import (PropagationInterval, SpectroscopyProtocol,
+                                  standard_nq_protocol)
+
+# 1. Matrices (hbar = 1, eV), basis ordering (|e>, |g>)
+sigma_z = np.diag([1.0, -1.0]).astype(complex)
+sigma_x = np.array([[0, 1], [1, 0]], dtype=complex)
+sigma_m = np.array([[0, 0], [1, 0]], dtype=complex)   # |g><e|
+H, mu = 1.0 * sigma_z, 0.5 * sigma_x
+gamma_1, gamma_phi = 0.010, 0.005                     # 1/T1, 1/T2* (eV)
+
+# 2. Model contract: (operator, rate) pairs, rate kept out of the operator
+model = EigenbasisKModel(H, mu, c_ops_raw=(
+    (sigma_m, gamma_1),          # population decay at gamma_1
+    (sigma_z, gamma_phi / 2),    # sigma_z dephases coherences at 2x its rate
+))
+
+# 3. Solver
+solver = SpectroscopySolver(backend="dense", eta=1e-4)
+solver.feed_model(model)
+
+# 4-5. Linear response: one ket interaction, one frequency interval
+linear = FrequencyPathway("linear", interactions=[{"label": "Ku"}],
+                          component="linear")
+protocol = SpectroscopyProtocol(
+    intervals=[PropagationInterval("omega1", "frequency")])
+w = np.linspace(1.9, 2.1, 4001)
+res = solver.generate_spectrum(protocol, {"omega1": w}, pathways=[linear])
+A = res.pathways["linear"].imag      # absorptive part
+half = w[A >= A.max() / 2]
+Gamma_2 = gamma_1 / 2 + gamma_phi
+print(f"linear peak      : {w[np.argmax(A)]:.4f} eV")
+print(f"FWHM (numerical) : {half[-1] - half[0]:.4f} eV")
+print(f"2(Gamma_2 + eta) : {2 * (Gamma_2 + solver.eta):.4f} eV")
+
+# Third-order rephasing (R1 + R2) at t2 = 0: omega_1 and omega_3 resolved
+R1 = FrequencyPathway("R1", interactions=[
+    {"label": "Bu", "pulse_index": 0}, {"label": "Ku", "pulse_index": 1},
+    {"label": "Bd", "pulse_index": 2}], component="rephasing")
+R2 = FrequencyPathway("R2", interactions=[
+    {"label": "Bu", "pulse_index": 0}, {"label": "Bd", "pulse_index": 1},
+    {"label": "Ku", "pulse_index": 2}], component="rephasing")
+protocol_2d = standard_nq_protocol(order=1, nq_interval=1, detection_interval=3,
+                                   n_interactions=3, nq_axis="omega1q")
+axes = {"omega1q": np.linspace(-2.2, -1.8, 81),
+        "omega3": np.linspace(1.8, 2.2, 81)}
+res2 = solver.generate_spectrum(protocol_2d, axes, pathways=[R1, R2],
+                                fixed_coordinates={"t2": 0.0})
+S2 = res2.components["rephasing"]
+i, j = np.unravel_index(np.argmax(np.abs(S2)), S2.shape)
+print(f"rephasing peak   : (omega1q, omega3) = "
+      f"({res2.axis_values[0][i]:.3f}, {res2.axis_values[1][j]:.3f}) eV")
+print(f"|S| at peak      : {np.abs(S2[i, j]):.2f}")
+print(f"2 mu^4/(Gamma_2 + eta)^2 : {2 * 0.5**4 / (Gamma_2 + solver.eta)**2:.2f}")
+\end{verbatim}
+
+\subsection{Expected output}
+The script runs in about two seconds on a laptop and prints
+\begin{verbatim}
+linear peak      : 2.0000 eV
+FWHM (numerical) : 0.0202 eV
+2(Gamma_2 + eta) : 0.0202 eV
+rephasing peak   : (omega1q, omega3) = (-2.000, 2.000) eV
+|S| at peak      : 1225.37
+2 mu^4/(Gamma_2 + eta)^2 : 1225.37
+\end{verbatim}
+Each numerical line is followed by its analytical value. The absorptive line has a full width at half maximum $2(\Gamma_2+\eta)$, with $\Gamma_2=\gamma_1/2+\gamma_\phi$; the width confirms that each supplied rate $\gamma_c$ multiplies $\mathcal{D}_c[\hat\rho]$ unchanged, so that the $\hat\sigma_z$ channel must carry $\gamma_\phi/2$ (a diagonal channel $\hat L_c=\sum_x l_x\ket{x}\bra{x}$ damps $\ket{x}\bra{y}$ at the rate $\gamma_c(l_x-l_y)^2/2$). The rephasing signal peaks on the antidiagonal quadrant $(\omega_{1q},\omega_3)=(-2,2)~\mathrm{eV}$, where each of the two pathways contributes $|\hat\mu_{eg}|^4/(\Gamma_2+\eta)^2$. Replacing \texttt{backend="dense"} by \texttt{backend="sparse\_sector"} gives the same output.
+
+\subsection{Next steps and tests}
+\begin{itemize}
+\item \texttt{examples/old\_scripts/quickstart.py}: the listing above.
+\item \texttt{examples/quickstart\_two\_level\_model.ipynb}: the tutorial of the manuscript (Sec.~\ArtSecUsage), with populations, action detection, and integrated jump observables (Sec.~\ref{sec:observables}); the listing of the manuscript is extracted from its cells tagged \texttt{listing}.
+\item \texttt{examples/example1\_xxz\_chain\_thermal.ipynb} and \texttt{examples/example2\_coupled\_modes\_detection.ipynb}: Examples~1 and~2 of the manuscript.
+\item \texttt{python -m pytest}: runs the test suite in \texttt{tests/}, including the analytical checks of the manuscript (about 40~s with a single BLAS thread, \texttt{OMP\_NUM\_THREADS=1}); \texttt{tests/api/} checks the contracts and options of the library, \texttt{tests/physics/} the closed-form results and limiting cases, and \texttt{tests/regression/} compares eight small calculations with stored outputs, which any change of the numerical core must reproduce.
+\item \texttt{validation/}: analysis notebooks (convergence, analytical limits, backend agreement), benchmark notebooks and scripts (time, memory, comparison with the original QuDPy), the scripts that redraw the figures of the manuscript, the shared models, and the stored results (see \texttt{validation/README.md}).
+\end{itemize}
+Section~\ref{app1} documents the model contract, the solver, and the backends; Sec.~\ref{sec:pathway-conventions} fixes the sign and ordering conventions of the pathways.
+
+
+\section{Solver API and implementation reference}
+\label{app1}
+\subsection{\texttt{SectorModel}: external model contract}
+
+\noindent \texttt{SectorModel} is the block-based interface between an external physical model and \texttt{SpectroscopySolver}. The model defines the physical truncation, basis, operators, initial state, and dissipative channels; the solver validates, assembles, and propagates these objects. The truncated Hilbert space is a direct sum,
+\begin{equation}
+    \mathcal{H}=\bigoplus_{s\in\mathcal{S}}\mathcal{H}_s,
+    \qquad \dim(\mathcal{H}_s)=d_s,
+\end{equation}
+and a block mapping source sector $s$ to target sector $t$ has the form
+\begin{equation}
+    \hat{A}_{ts}=\hat{P}_t \hat{A} \hat{P}_s\in\mathbb{C}^{d_t\times d_s}.
+\end{equation}
+Sector labels are opaque hashable objects and sector dimensions need not be equal.
+
+\subsubsection{Required structural methods}
+
+The minimal contract used by \texttt{feed\_model} is
+\begin{itemize}
+    \item \texttt{sectors()} and \texttt{dimension(sector)};
+    \item \texttt{hamiltonian\_blocks(source)}, returning a mapping from target sectors to Hamiltonian blocks;
+    \item \texttt{transition\_blocks(...)}, with source sector, operator name, and direction (\texttt{"plus"} or \texttt{"minus"});
+    \item \texttt{observable\_blocks(...)}, returning the blocks of a named detection operator for a source sector.
+\end{itemize}
+Hamiltonian blocks may be diagonal or inter-sector. Operator blocks may be dense arrays, sparse matrices, or matrix-free linear operators exposing their shape and forward/adjoint actions. The backends apply a block to the whole density matrix at once, as a product with the matrix of all its columns. A linear operator should therefore define \texttt{matmat} and \texttt{rmatmat} when it can do better than a loop over columns (every \texttt{scipy.sparse.linalg.LinearOperator} has them, with that loop as default); an object that provides only \texttt{matvec} and \texttt{rmatvec} is still accepted and applied column by column.
+
+\subsubsection{Initial and equilibrium states}
+
+The model method \texttt{initial\_condition(context=None)} returns either a \texttt{PureState} or a \texttt{DensityState}. A pure state stores one sector label and a vector in that sector. A density state stores blocks under keys \texttt{(ket\_sector, bra\_sector)}:
+\begin{equation}
+    \rho_{ab}=\hat{P}_a\hat{\rho} \hat{P}_b\in\mathbb{C}^{d_a\times d_b}.
+\end{equation}
+Both populations ($a=b$) and cross-sector coherences ($a\neq b$) are supported. A block may be supplied as a dense matrix through \texttt{DenseDensityBlock}, or in factored form through \texttt{LowRankDensityBlock(X,Y,S)}, representing
+\begin{equation}
+    \rho_{ab}=X S Y^\dagger,
+\end{equation}
+with $S$ optional. During backend construction, the assembled state is normalized and checked for compatible dimensions, Hermiticity, unit trace, and positive semidefiniteness within numerical tolerance.
+
+Thermodynamic input is normalized to
+\begin{verbatim}
+ThermodynamicContext(
+    temperature,
+    ensemble="canonical",
+    chemical_potentials={},
+    k_ensemble="independent",
+    metadata={},
+)
+\end{verbatim}
+The supported ensemble labels are canonical and grand canonical; the $k$ ensemble is independent or global. A missing context does not imply zero temperature or equilibrium: it delegates the default state to the model. When a context is supplied, the optional equilibrium-state method remains model-side; the solver does not infer a thermal state from the Hamiltonian. The provided adapters build the Gibbs state of $\hat H$ without reference to the collapse channels; whether it is stationary under the generator is checked by the solver (Sec.~\ref{sec:stationarity}).
+
+\subsubsection{Transition, detection, and collapse operators}
+
+For a named interaction operator, the model supplies the physical decomposition
+\begin{equation}
+    \hat{\mu}=\hat{\mu}_+ + \hat{\mu}_-.
+\end{equation}
+The solver does not infer this decomposition from energy differences or sector labels. The separate \texttt{observable\_blocks} method exposes named detection operators, so propagation and readout operators need not coincide.
+
+The backends check the operators they receive. When they are built, $\hat H x$ and $\hat H^\dagger x$ are compared for two random vectors, and a non-Hermitian Hamiltonian raises \texttt{ModelContractError} (backend option \texttt{hermiticity\_tolerance}, default $10^{-10}$, relative; the check is skipped for matrix-free blocks that provide no adjoint action). At the first use of each interaction operator, $\hat\mu_-x$ is compared with $\hat\mu_+^\dagger x$, and a mismatch emits a \texttt{ModelConsistencyWarning} (option \texttt{transition\_tolerance}, default $10^{-8}$), because $\hat\mu=\hat\mu_++\hat\mu_-$ is then not Hermitian and the detected signal is not that of a physical observable. The adapters supplied with the package satisfy both conditions by construction.
+
+The optional collapse-channel method returns \texttt{CollapseChannel} objects. A channel stores a name, a non-negative rate $\gamma_c$, and blockwise $\hat{L}_c$, with the convention
+\begin{equation}
+    \mathcal{L}[\hat{\rho}]=-i[\hat{H},\hat{\rho}]+\sum_c\gamma_c\,\mathcal{D}_c[\hat{\rho}],
+    \qquad
+    \mathcal{D}_c[\hat{\rho}]=\hat{L}_c\hat{\rho} \hat{L}_c^\dagger-\frac{1}{2}
+    \{\hat{L}_c^\dagger \hat{L}_c,\hat{\rho}\}.
+\end{equation}
+The rate must therefore not be folded into the supplied operator blocks.
+
+\subsubsection{Requirements and capabilities}
+
+The optional \texttt{requirements()} and \texttt{capabilities()} methods advertise the requested state kind, generator kind, propagation domains, exactness, matrix-free constraint, and related metadata. The solver combines this declaration with the effective initial state and collapse channels before selecting or validating a backend. Thus \texttt{SectorModel} is a data contract, not a prescribed physical model.
+
+
+
+
+
+\subsection{\texttt{EigenbasisKModel}: provided $k$-space adapter}
+
+\noindent \texttt{EigenbasisKModel} constructs a \texttt{SectorModel}-compatible object from site-basis Hamiltonians and operators. A single $(d,d)$ Hamiltonian produces one sector; an $(N_k,d,d)$ stack produces independent sectors $\{k_0,\ldots,k_{N_k-1}\}$. This adapter introduces no inter-$k$ coupling.
+
+\subsubsection{Constructor inputs}
+The constructor has the form 
+\begin{verbatim}
+EigenbasisKModel(
+    H_model,
+    interaction_op_array,
+    *,
+    c_ops_raw=(),
+    detection_op_array=None,
+    observable_op_arrays=None,
+    j_plus_array=None,
+    j_minus_array=None,
+    rwa_tol=1e-6,
+    transition_window=None,
+    k_weights=None,
+    energy_unit=None,
+    boltzmann_constant=None,
+)
+\end{verbatim}
+
+\subsubsection{Diagonalization and basis transformation}
+For each k-point, the adapter diagonalizes the site-basis Hamiltonian,
+
+\begin{equation}
+    \hat{H}_{site}^{(k)}U^{(k)} = U^{(k)} E^{(k)}. 
+\end{equation}
+
+where $E^{(k)}$ is diagonal. Every supplied interaction, detection, observable, and collapse operator is transformed according to
+\begin{equation}
+    \hat{A}_{\mathrm{eig}}^{(k)} = \big(U^{(k)}\big)^\dagger \hat{A}_{\mathrm{site}}^{(k)} U^{(k)}.
+\end{equation}
+These transformations are performed once during model construction.
+
+\subsubsection{Automatic transition-operator decomposition}
+\label{sec:auto_decomposition}
+When explicit \texttt{j\_plus\_array} and \texttt{j\_minus\_array} inputs are not provided, the transformed interaction operator is separated according to the eigenenergy differences. 
+
+For a matrix element connecting source eigenstate j to target eigenstate i, define
+\begin{equation}
+    \Delta E_{ij}^{(k)} = E_i^{(k)} - E_j^{(k)}
+\end{equation}
+The automatic decomposition is
+
+\begin{align}
+\left(\hat{\mu}_{+}^{(k)}\right)_{ij}
+&=\begin{cases}\left(\hat{\mu}^{(k)}\right)_{ij},
+&\Delta E_{ij}^{(k)}>\texttt{rwa\_tol},\\0,
+&
+\text{otherwise},
+\end{cases}
+\\[4pt]
+\left(\hat{\mu}_{-}^{(k)}\right)_{ij}
+&=
+\begin{cases}
+\left(\hat{\mu}^{(k)}\right)_{ij},
+&
+\Delta E_{ij}^{(k)}<-\texttt{rwa\_tol},\\
+0,&\text{otherwise}.
+\end{cases}
+\end{align}
+
+Matrix elements satisfying
+\begin{equation}
+    |\Delta E_{ij}^{(k)}| \leq \text{rwa\_tol}
+\end{equation}
+are omitted from both components; this includes the static dipole moments and the elements between degenerate states. Models requiring explicit manifold assignments, degeneracy handling, or external pathway conventions may instead provide both \texttt{j\_plus\_array} and \texttt{j\_minus\_array}. The reported decomposition is then \texttt{"automatic\_energy"} or \texttt{"explicit"}.
+
+\paragraph{Bandwidth window and report.}
+In the impulsive limit every transition of positive energy is treated as resonant with the field, however small its Bohr frequency, which is wrong for a low-frequency transition (vibrational, or intra-manifold) of a model driven by an optical pulse. The argument \texttt{transition\_window=}$(\omega_{\min},\omega_{\max})$ keeps only the elements with $\omega_{\min}\leq|\Delta E_{ij}|\leq\omega_{\max}$, in the units of the Hamiltonian: the band that the pulses of the experiment can drive. It requires $0\leq\omega_{\min}<\omega_{\max}$ and cannot be combined with explicit \texttt{j\_plus\_array} and \texttt{j\_minus\_array}. The method \texttt{transition\_summary()} returns a dictionary with the fractions of $\sum_{ij}|\mu_{ij}|^2$ that are kept (\texttt{kept\_fraction}), static (\texttt{static\_fraction}: diagonal elements of non-degenerate states), inside degenerate subspaces (\texttt{degenerate\_fraction}) and excluded by the window (\texttt{outside\_window\_fraction}), together with \texttt{n\_degenerate\_states}; the degenerate weight is the Frobenius weight of the zero-frequency blocks, which does not depend on the basis chosen inside a degenerate subspace. If the degenerate weight exceeds $10^{-6}$ of the total, the constructor emits a \texttt{ModelConsistencyWarning}: the field does not couple these states, and the explicit arrays must be used if it should. \texttt{ExcitationSectorModel.transition\_summary()} reports \texttt{"explicit\_sector"}.
+
+\subsubsection{Detection and named observables}
+
+For every sector $k$, the adapter returns only intra-sector blocks:
+\begin{align}
+\texttt{hamiltonian\_blocks(k)}
+&=
+\{\texttt{k}:\hat{H}_{\mathrm{eig}}^{(k)}\},\\
+\texttt{transition\_blocks(\text{"light\_matter"},\text{"plus"},k)}
+&=
+\{\texttt{k}:\hat{\mu}_{+}^{(k)}\},\\
+\texttt{transition\_blocks(\text{"light\_matter"},\text{"minus"},k)}
+&=
+\{\texttt{k}:\hat{\mu}_{-}^{(k)}\}.
+\end{align}
+
+The default detection operator is the transformed \texttt{detection\_op\_array}; if it is omitted, the interaction operator is reused. The observable mapping adds independently named operators, transformed in the same way. Their names are returned by \texttt{observable\_names()}. When named observables are configured, requesting an unknown name raises an error; without that mapping, arbitrary names retain the legacy fallback to the single detection operator.
+
+
+\subsubsection{Initial and equilibrium states}
+
+The default initial condition is a mixed state distributed over the $k$ sectors according to normalized \texttt{k\_weights}. Within each sector, the population occupies the lowest eigenstate:
+
+\begin{equation}
+    \rho^{(0)}_{kk}=w_k\ket{0_k}\bra{0_k},
+    \qquad \sum_k w_k=1.
+\end{equation}
+For a supplied thermodynamic context, the equilibrium state is constructed from the eigenergies of each sector. At positive temperature,
+\begin{equation}
+    \rho_{kk}^{\mathrm{eq}}=w_k\sum_i
+    \frac{\exp[-\beta E_i^{(k)}]}{Z_k}\ket{i_k}\bra{i_k},
+    \qquad Z_k=\sum_i\exp[-\beta E_i^{(k)}],
+\end{equation}
+with 
+\begin{equation}
+    \beta = \frac{1}{k_B T}
+\end{equation}
+
+where $k_B$ must be in the unit of the Hamiltonian per kelvin. It has no default, because a wrong unit gives a wrong thermal state without any warning: pass \texttt{energy\_unit} (Sec.~\ref{sec:energy-units}) or \texttt{boltzmann\_constant} to the model, otherwise a temperature above zero raises \texttt{ValueError} at \texttt{feed\_model}. At zero temperature, degenerate lowest states within each sector share its weight. The present adapter treats the $k$ sectors independently and preserves the fixed $k$ weights.
+
+\subsubsection{Dissipative channels and backend requirements}
+Each raw collapse-operator pair ($\hat{L}_c$, $\gamma_c$) is transformed into the eigenbasis of every $k$-sector. The resulting channel has a generated name such as \texttt{c\_op\_0} and contains only intra-sector blocks, 
+\begin{equation}
+    \hat{L}_{c,\mathrm{eig}}^{(k)} = \big( U^{(k)} \big)^\dagger \hat{L}_{c,\mathrm{site}}^{(k)} U^{(k)}.
+\end{equation}
+If at least one collapse channel is supplied, the adapter advertises a Lindblad generator; otherwise it advertises unitary evolution. Its default state representation is mixed because the independent $k$ sectors are combined incoherently.
+
+\subsection{\texttt{ExcitationSectorModel}: explicit manifold adapter}
+
+\noindent \texttt{ExcitationSectorModel} is the adapter for models already organized into excitation or other user-defined sectors. Unlike \texttt{EigenbasisKModel}, sector dimensions may differ and rectangular inter-sector operator blocks are supported explicitly.
+
+\subsubsection{Constructor and block convention}
+
+\begin{verbatim}
+ExcitationSectorModel(
+    hamiltonian_blocks,
+    raising_blocks,
+    *,
+    lowering_blocks=None,
+    detection_blocks=None,
+    observable_op_blocks=None,
+    c_ops_raw=(),
+    initial_sector=None,
+    initial_state_index=0,
+    energy_unit=None,
+    boltzmann_constant=None,
+)
+\end{verbatim}
+The Hamiltonian mapping contains one dense Hermitian block per sector. All operator mappings use \texttt{(target, source)} sector keys. Each sector Hamiltonian is diagonalized as
+\begin{equation}
+    \hat{H}_s V_s=V_s E_s,
+\end{equation}
+and every rectangular block is transformed consistently,
+\begin{equation}
+    \hat{A}_{ts}^{\mathrm{eig}}=V_t^\dagger \hat{A}_{ts}V_s.
+\end{equation}
+
+If \texttt{lowering\_blocks} is omitted, it is generated as the blockwise adjoint of \texttt{raising\_blocks}. If \texttt{detection\_blocks} is omitted, the sum of raising and lowering blocks is used. The mapping \texttt{observable\_op\_blocks} exposes additional named observables through the same block convention. Because the transition blocks are supplied directly, \texttt{transition\_decomposition()} reports \texttt{"explicit\_sector"}.
+
+\subsubsection{Initial and thermal states}
+
+The default initial sector is the one containing the global lowest eigenenergy unless \texttt{initial\_sector} is specified; \texttt{initial\_state\_index} selects the eigenstate inside that sector. For a thermodynamic context, the adapter constructs one global canonical distribution over all retained sector eigenstates,
+\begin{equation}
+    \hat{\rho}^{\mathrm{eq}}=
+    \frac{1}{Z}\sum_{s,i}\exp(-\beta E_{si})
+    \ket{s,i}\bra{s,i},
+    \qquad Z=\sum_{s,i}\exp(-\beta E_{si}).
+\end{equation}
+At zero temperature, the population is shared among all globally degenerate ground states. The Boltzmann constant again fixes the energy--temperature unit conversion and again has no default (Sec.~\ref{sec:energy-units}).
+
+\paragraph{Energy unit and Boltzmann constant.}
+\label{sec:energy-units}
+Both adapters take \texttt{energy\_unit=None} and \texttt{boltzmann\_constant=None}. A thermal state ($T>0$) needs $k_B$ in the unit of the Hamiltonian per kelvin, given by one of the two arguments:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\texttt{energy\_unit} & unit of the Hamiltonian & $k_B$ per kelvin\\
+\midrule
+\texttt{"eV"} & electronvolt & $8.617333262\times10^{-5}$\\
+\texttt{"meV"} & millielectronvolt & $8.617333262\times10^{-2}$\\
+\texttt{"cm-1"} & wavenumber & $0.6950348004$\\
+\texttt{"THz"} & ordinary frequency $E/h$ & $2.083661912\times10^{-2}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+(CODATA 2018.) \texttt{"THz"} is the ordinary frequency $\nu=E/h$, so $k_B/h=0.0208\,\mathrm{THz/K}$; a Hamiltonian in angular frequency (rad/ps) needs $k_B/\hbar=0.1309\,\mathrm{rad\,ps^{-1}/K}$ and is passed through \texttt{boltzmann\_constant}. The solver propagates with $\exp(-i\hat Ht)$ for $\hat H$ as supplied, so that the unit of time is the inverse of the unit of the Hamiltonian, whatever its meaning; for \texttt{energy\_unit="THz"}, where $\hat H$ is $E/h$, one unit of time is $1/(2\pi\,\mathrm{THz})\simeq0.159$~ps, not $1$~ps. Giving both arguments, an unknown unit or a non-positive, infinite or NaN constant raises \texttt{ValueError}. With neither, a temperature of zero is accepted, since no $k_B$ enters, and a temperature above zero raises a \texttt{ValueError} that lists the options when the model is registered with \texttt{feed\_model}. A model written by the user supplies its own thermal state and is not affected.
+
+
+
+
+
+
+
+
+\subsection{\texttt{SpectroscopySolver}: numerical orchestrator}
+
+\texttt{SpectroscopySolver} is the public orchestrator of the solver. It connects an external SectorModel to a numerical backend, manages the active pathways responses, and assembles multidimensional spectra. The solver does not contain model-specific physics. The physical information is supplied by the SectorModel, while the numerical propagation is delegated to the selected backend.
+
+\subsubsection{Constructor}
+
+\begin{verbatim}
+SpectroscopySolver(
+    backend="sparse_sector",
+    eta=...,                    # required, no default
+    requirements=None,
+    thermodynamic_context=None,
+    check_stationarity="warn",
+    stationarity_tolerance=1e-8,
+    **backend_options
+)
+\end{verbatim}
+The broadening \texttt{eta} is required and has no default. It is the regularization of the frequency-domain resolvents $[(\eta-i\omega)\mathbb{1}-\mathcal{L}]^{-1}$ (Sec.~\ArtSecResolvent{} of the article): it keeps the shifted systems away from the poles of $\mathcal{L}$ and, as a consequence, adds a Lorentzian half width $\eta$ to every line (a line of decay rate $\Gamma$ becomes a Lorentzian of half width $\Gamma+\eta$). It is expressed in the unit of the Hamiltonian, so that no number is reasonable for every model. A missing \texttt{eta}, or a negative, infinite or NaN one, raises \texttt{ValueError}, from the solver and from the backends alike. The arguments \texttt{check\_stationarity} and \texttt{stationarity\_tolerance} control the check of the reference state described below.
+
+When \texttt{backend="auto"} is selected, the solver compares the effective model requirements with the declared capabilities of the registered backends. Built-in and custom backends are listed by \texttt{available\_backends()} and custom implementations are added with \texttt{register\_backend(name, backend\_class)}.
+
+
+\subsubsection{Model registration and backend construction}
+
+
+The method \texttt{feed\_model(model, *, context=None, initial\_state=None)} connects a \texttt{SectorModel} to the solver. The method performs the following operations:
+\begin{enumerate}
+    \item validates the structural model contract;
+    \item resolves the thermodynamic context, initial state, and collapse channels;
+    \item updates the effective state and generator requirements;
+    \item selects or validates a compatible numerical backend;
+    \item constructs the sector layout, generator, and operator blocks;
+    \item checks that the reference state is stationary (Sec.~\ref{sec:stationarity}).
+\end{enumerate}
+The optional \texttt{context} argument overrides the thermodynamic context provided to the constructor when it is not \texttt{None}. The method return the solver instance itself, allowing chained construction:
+\begin{verbatim}
+    solver = (
+    SpectroscopySolver(backend="sparse_sector", eta=0.002)
+    .feed_model(model, context=context))
+\end{verbatim}
+
+Pathway calculations cannot be performed before \texttt{feed\_model} has successfully constructed the backend.
+
+\subsubsection{Reference-state check}
+\label{sec:stationarity}
+
+The perturbative response of the manuscript starts from a reference state $\hat\rho_{\mathrm{ref}}$ that does not evolve before the first pulse, $\mathcal{L}\hat\rho_{\mathrm{ref}}=0$. The model supplies this state and nothing in the Hamiltonian guarantees the property: the Gibbs state of $\hat H$ is stationary for a closed model, but with collapse channels it is stationary only if the channels satisfy the detailed balance of $\hat H$ at that temperature. At the end of \texttt{feed\_model} the solver therefore applies the generator once to the reference state and computes the relative residual
+\begin{equation}
+    r=\frac{\lVert\mathcal{L}\kket{\hat\rho_{\mathrm{ref}}}\rVert}{\lVert\kket{\hat\rho_{\mathrm{ref}}}\rVert},
+\end{equation}
+with Frobenius norms and in the units of the Hamiltonian and of the rates: it has the dimension of a rate, so that the default tolerance is absolute, in the unit of $\hat H$. The check is therefore unit dependent: for an open two-level system whose upward rate departs from detailed balance by a relative $10^{-6}$, the residual is $2.6\times10^{-10}$, $2.6\times10^{-7}$ and $2.6\times10^{-4}$ when the model is written in eV, meV and $\mu$eV; set \texttt{stationarity\_tolerance} accordingly. The tolerance \texttt{rwa\_tol} of the transition decomposition is absolute in the same way. The constructor argument \texttt{check\_stationarity} selects the behavior when $r$ exceeds \texttt{stationarity\_tolerance} (default $10^{-8}$): \texttt{"warn"} (default) emits a \texttt{StationarityWarning}, \texttt{"error"} raises \texttt{StationarityError}, and \texttt{"off"} skips the check. The method \texttt{stationarity\_residual()} returns $r$ at any time, and \texttt{summary()} reports it. For example, an open two-level system at $10~\mathrm{K}$ with the channel $\hat L=\ket{g}\bra{e}$ has a Gibbs state with $9\%$ of excited population that the channel empties: $r=0.03$, and the single pathway $K_u$ of the Quick start, which starts from the ground population, is $9\%$ below its value for the stationary state, which is the ground state (the complete linear response, $K_u$ from the ground population and $B_d$ from the excited one, is proportional to $p_g-p_e$ and is $18\%$ below). The check does not construct a stationary state; a state that fails it is replaced by the stationary state of the generator (Sec.~\ref{sec:steady-state}), computed by \texttt{steady\_state()} and imposed with \texttt{feed\_model(model, initial\_state="steady")}.
+
+\subsubsection{Stationary state of the generator}
+\label{sec:steady-state}
+
+The reference state can be replaced by the stationary state of the generator, $\mathcal{L}\hat\rho_{\mathrm{ss}}=0$ with $\mathrm{Tr}\,\hat\rho_{\mathrm{ss}}=1$, which the solver computes from the model itself:
+\begin{verbatim}
+state = solver.steady_state(check_unique=None)       # DensityState
+solver.feed_model(model, initial_state=state)        # or initial_state="steady"
+\end{verbatim}
+\texttt{steady\_state} solves the linear system
+\begin{equation}
+    \big(\mathcal{L}+\kket{\hat r}\langle\!\langle\mathbb{1}|\big)\kket{\hat\rho}=\kket{\hat r},
+    \qquad \mathrm{Tr}\,\hat r=1 ,
+\end{equation}
+with $\hat r=\mathbb{1}/D_{\mathrm H}$ and $\langle\!\langle\mathbb{1}|$ the trace functional. Applying $\langle\!\langle\mathbb{1}|$ to it gives $\mathrm{Tr}\,\hat\rho=1$ because $\langle\!\langle\mathbb{1}|\mathcal{L}=0$ (trace preservation), hence $\mathcal{L}\hat\rho=0$. The matrix is invertible exactly when the kernel of $\mathcal{L}$ is one-dimensional, and its solution is then the stationary state, whatever $\hat r$. The dense backend factorizes the matrix (LU); the sparse backend applies it matrix-free and solves it with GMRES (restart 100, tolerance \texttt{krylov\_tolerance}), without preconditioner, within 100 restart cycles unless \texttt{krylov\_maxiter} is set; a stiff generator, whose relaxation gap is small next to $\|\mathcal{L}\|$, can exhaust them, in which case \texttt{ConvergenceError} names the remedies.
+
+The state depends only on the generator, not on the reference state of the model or on the thermodynamic context. It is returned as a \texttt{DensityState} that contains the sector blocks above $10^{-14}$, with the diagnostics in \texttt{state.metadata["steady\_state"]}: \texttt{method}, \texttt{relative\_residual} ($\lVert\mathcal{L}\hat\rho\rVert/\lVert\hat\rho\rVert$), \texttt{hermiticity\_error} (before symmetrization), \texttt{minimum\_eigenvalue}, and the evidence on uniqueness. The state of a unique kernel is a density matrix; a \texttt{SteadyStateWarning} is emitted when it is not (smallest eigenvalue below $-10^{-8}$, Hermiticity error above $10^{-8}$, or a large residual).
+
+\paragraph{Uniqueness.} If the kernel of $\mathcal{L}$ has dimension above one (a closed model, conserved quantities, a level or sector without relaxation, dark states of a collective decay), there is no stationary state but a family, and what the solver returns is one element of it, without physical meaning; a \texttt{SteadyStateWarning} says so. The dense backend detects it for free: the reciprocal condition number $\rho$ of the LU gives the error estimate $\epsilon/\rho$, and the kernel is declared degenerate (\texttt{unique=False}, minimum-norm solution) above $10^{-6}$. The sparse backend does not test it by default (\texttt{unique=None}), because the test is as stiff as the generator: with \texttt{check\_unique=True} it solves a second system with a random $\hat r$, which for a degenerate kernel gives another element (GMRES returns the projection of $\hat r$ on the kernel); the solve is limited to 2000 iterations and leaves \texttt{unique=None} if it has not converged, as it does for a stiff unique generator from $D_{\mathrm H}\gtrsim30$ with a rate 1/1000 of the energy scale. For a small model, the dense backend is the tool to ask whether the stationary state is unique. For a closed model the maximally mixed state is returned with a warning (it is stationary, as is any state diagonal in the eigenbasis).
+
+\paragraph{Imposing a reference state.} \texttt{feed\_model(model, *, context=None, initial\_state=None)} accepts a \texttt{DensityState} or a \texttt{PureState} for \texttt{initial\_state}, or the string \texttt{"steady"}, which computes the stationary state of the generator and takes it. The state replaces the one the model would supply (its \texttt{equilibrium\_state(context)} or \texttt{initial\_condition}, which are then not called, so that a thermal context without \texttt{energy\_unit} is not an error); \texttt{context} is still given to the model for its collapse channels. A \texttt{DensityState} is validated like any reference state (Hermitian, unit trace, positive); another type raises \texttt{TypeError}. The stationarity check then runs as usual and passes, $r$ being of the order of the residual of the solve. For the two-level system of the example above, imposing the stationary state removes the 9\% of excited population: the linear response at resonance equals that of the ground state, and for channels that satisfy detailed balance (rates $\gamma_\downarrow$ and $\gamma_\uparrow=\gamma_\downarrow e^{-\hbar\omega/k_BT}$) the stationary state is the Gibbs state, which \texttt{steady\_state} reproduces to $10^{-10}$. With rates $\gamma_\downarrow$ and $\gamma_\uparrow$ that do not, the excited population is $\gamma_\uparrow/(\gamma_\uparrow+\gamma_\downarrow)$ and the $K_u$ pathway scales with the ground population $\gamma_\downarrow/(\gamma_\uparrow+\gamma_\downarrow)$, the complete linear response with $p_g-p_e=(\gamma_\downarrow-\gamma_\uparrow)/(\gamma_\uparrow+\gamma_\downarrow)$.
+
+
+
+
+\subsubsection{Pathway registration}
+
+The active pathways are registered with \texttt{set\_pathways(pathways)}. The input may contain \texttt{FrequencyPathway} objects or mappings from which these objects can be constructed. Names must be unique and at least one pathway must be supplied. The method returns the solver instance. Active pathways are queried with \texttt{get\_pathways(component=None)}.
+\newline
+
+If \texttt{component} is omitted, all active pathways are returned. If a component is provided, only pathways assigned to that component are returned. The aliases \texttt{"nonrephasing"} and \texttt{"nonrephase"} are normalized to the internal component name \texttt{"unrephasing"}. 
+\newline
+
+The method \texttt{pathway\_summary()} returns serializable pathway metadata without exposing the internal model or backend objects.
+
+\subsubsection{Propagation protocols}
+
+A \texttt{SpectroscopyProtocol} is an ordered tuple of \texttt{PropagationInterval} objects. Each interval has a unique name, a domain in \texttt{"time"}, \texttt{"frequency"}, or \texttt{"identity"}, an optional coherence order, an optional interval-specific broadening \texttt{eta}, and a flag \texttt{signed}. By default the protocol checks the modulus of the coherence order of a pathway at an interval ($+NQ$ and $-NQ$ are both accepted); with \texttt{signed=True} it checks the sign as well (the check is on the labels of the pathway, not on the propagated state). The protocol validates pathway length, coherence-order magnitude, and coordinates. It separately exposes all coordinate names and its frequency- and time-axis names.
+
+The helper
+\begin{verbatim}
+standard_nq_protocol(
+    order,
+    nq_interval,
+    detection_interval,
+    *,
+    n_interactions=3,
+    nq_axis=None,
+    detection_axis="omega3",
+)
+\end{verbatim}
+constructs the common two-frequency-axis protocol, with the remaining propagation intervals kept in the time domain.
+
+\subsubsection{Single-pathway calculation}
+
+The method \texttt{calc\_pathway(pathway, protocol, coordinates)} evaluates one pathway at one coordinate point. 
+
+The input are:
+\begin{itemize}
+    \item \texttt{pathway}: a \texttt{FrequencyPathway} object or the name of an active pathway;
+    \item \texttt{protocol}: a SpectroscopyProtocol describing the propagation intervals;
+    \item \texttt{coordinates}: a mapping from interval names to numerical time or frequency values. 
+\end{itemize}
+
+The protocol determines which intervals are propagated in the time or frequency domain. Every non-identity interval must have a corresponding entry in \texttt{coordinates}. The method return a \texttt{PathwayResult} containing
+\begin{itemize}
+    \item the complex pathway response;
+    \item the pathway name;
+    \item optional numerical diagnostics;
+    \item a mapping of additional observable values.
+\end{itemize}
+
+If $S_p(\omega)$ denotes the response of pathway $p$, then the returned value is the complex quantity 
+\begin{equation}
+    S_p(\omega)= S_p^{Re}(\omega) + iS_p^{Im}(\omega).
+\end{equation}
+
+\subsubsection{Several observables from one pathway propagation}
+
+The method 
+\begin{verbatim}
+calc_pathway_observables(
+    pathway,
+    protocol,
+    coordinates,
+    observables=None
+)
+\end{verbatim}
+
+propagates a pathway once and evaluates several readouts from its propagated response. The pathway's default detection is always included; additional names or \texttt{ObservableSpec} objects are normalized and deduplicated. Ordinary operator and jump-rate readouts reuse the final response. Action-detected and integrated-jump specifications can require extra post-pathway interaction branches or propagation, as described below.
+
+
+
+\subsubsection{Component calculation}
+
+The method \texttt{calc\_component(...)} sums selected pathways belonging to one component. If $\mathcal{P}_C$ denotes that set, the returned response is
+\begin{equation}
+    S_C(\omega)=\sum_{p\in\mathcal{P}_C}S_p(\omega).
+\end{equation}
+
+If \texttt{pathways=None}, all pathways belonging to the requested component are used; otherwise only the supplied subset is included.
+
+\subsubsection{Multidimensional spectrum generation}
+
+The method 
+\begin{verbatim}
+generate_spectrum(
+    protocol,
+    axes,
+    *,
+    fixed_coordinates=None,
+    pathways=None,
+    observables=None,
+    warn_null=True,
+    strategy="auto",
+    memory_limit_mb=1024.0,
+)
+\end{verbatim}
+evaluates the selected pathways over a multidimensional coordinate grid. The argument \texttt{axes} is a non-empty ordered mapping
+\newline
+
+\texttt{coordinate\_name: one\_dimensional\_values}
+\newline
+
+where each coordinate name must correspond to a non-identity interval in the protocol. Coordinates not included in axes must be supplied through \texttt{fixed\_coordinates}.
+\newline
+For example, a two-dimensional spectrum can be requested using
+
+\begin{verbatim}
+axes = {
+    "omega1": omega1_values,
+    "omega3": omega3_values,
+}
+fixed_coordinates = {
+    "t2": waiting_time,
+}
+\end{verbatim}
+The resulting array shape follows the insertion order of \texttt{axes}; \texttt{axis\_names} and \texttt{axis\_values} follow the same order, which need not be that of the intervals of the protocol. The returned \texttt{SpectrumResult} contains
+\begin{itemize}
+    \item \texttt{axis\_names}, \texttt{axis\_values}, and \texttt{fixed\_coordinates};
+    \item \texttt{pathways[name]} and component sums in \texttt{components[name]};
+    \item per-pathway arrays in \texttt{observables}, indexed first by observable and then by pathway;
+    \item component sums in \texttt{observable\_components}, indexed first by observable and then by component;
+    \item pathway metadata and numerical diagnostics, including \texttt{diagnostics["null\_pathways"]} (Sec.~\ref{sec:null-pathways}) and the strategy and work counters of Sec.~\ref{sec:strategies}.
+\end{itemize}
+The default detection of each pathway remains in the legacy \texttt{pathways} and \texttt{components} mappings. Additional requested observables are stored separately, preventing one detector from overwriting another.
+\newline
+The component arrays are the sums of the corresponding pathway arrays,
+\begin{equation}
+    S_C(\boldsymbol{\xi}) = \sum_{p \in C} S_p(\boldsymbol{\xi}),
+\end{equation}
+where $S_p(\boldsymbol{\xi})$ is evaluated at every grid point $\boldsymbol{\xi}$ by one of the two strategies below.
+
+\subsubsection{Evaluation strategies}
+\label{sec:strategies}
+
+A pathway response is the functional $\langle\!\langle d|\,\mathcal{O}_K\cdots\mathcal{O}_1|\hat{\rho}_0\rangle\!\rangle$ of an ordered chain of operations $\mathcal{O}_k$: the interaction superoperators, the propagators $\exp(\mathcal{L}t)$ of the time intervals and the resolvents $\mathcal{R}_\eta(\omega)$ of the frequency intervals; the detection vector $d$ is $\operatorname{vec}(\hat O^\dagger)$ for an operator observable, and includes the readout interaction of an action-detected observable and the integrated detector of a jump count. The argument \texttt{strategy} selects how the grid is evaluated.
+
+\begin{description}
+    \item[\texttt{"pointwise"}] The chain is propagated at every grid point. Two scanned frequency axes of $N_1$ and $N_2$ points cost $2N_1N_2$ shifted solves per pathway; additional observables reuse the propagation.
+    \item[\texttt{"factorized"}] The chain is cut between two scanned intervals, at an operation $c$ chosen to minimize the number of solves. With $\boldsymbol{\xi}_L$ the points of the axes before the cut and $\boldsymbol{\xi}_R$ those after it,
+    \begin{equation}
+        S_p(\boldsymbol{\xi}_L,\boldsymbol{\xi}_R)
+        = c_p\,\langle\!\langle G(\boldsymbol{\xi}_R)\,|\,F(\boldsymbol{\xi}_L)\rangle\!\rangle,
+        \quad
+        |F\rangle\!\rangle=\mathcal{O}_{c-1}\cdots\mathcal{O}_1|\hat{\rho}_0\rangle\!\rangle,
+        \quad
+        |G\rangle\!\rangle=(\mathcal{O}_K\cdots\mathcal{O}_c)^\dagger|d\rangle\!\rangle .
+    \end{equation}
+    Each side is evaluated once per point of its own axes and the grid is obtained from one matrix product. The adjoint of a resolvent is $\mathcal{R}_\eta(\omega)^\dagger=[(\eta+i\omega)\mathbb{1}-\mathcal{L}^\dagger]^{-1}$, that of a propagator is $\exp(\mathcal{L}^\dagger t)$, and that of a ket (bra) interaction $\hat\rho\mapsto T\hat\rho$ ($\hat\rho\mapsto\hat\rho T^\dagger$) is $\hat Y\mapsto T^\dagger\hat Y$ ($\hat Y\mapsto\hat Y T$). For two axes the cost is $N_1+N_2$ solves per pathway and observable instead of $2N_1N_2$. Pathways that begin with the same operations share them (the three rephasing pathways of the open two-level system start with the same bra interaction and the same resolvent, so they share the whole forward part), the detection vectors of several observables are carried as the columns of one adjoint chain, and operations at fixed coordinates between the two scanned intervals are applied on the side that has fewer vectors. It requires at least two scanned axes; with three axes the cut is placed where it costs least.
+    \item[\texttt{"auto"}] (default) takes the factorized evaluation when it applies, needs fewer solves than the pointwise one and fits in the memory limit, and the pointwise evaluation otherwise.
+\end{description}
+
+The two strategies give the same numbers up to the accuracy of the linear solves: about $10^{-15}$ of the largest value on the dense backend and the GMRES tolerance (\texttt{krylov\_tolerance}, $10^{-10}$ by default) on the sparse backend. The pointwise evaluation is kept for validation and for the cases in which the factorized one does not apply: a single scanned axis, and the \texttt{SparseSectorBackend} for a closed model with a pure state and time intervals only, which is evaluated as a rank-one dyad of two Hilbert-space vectors, cheaper than any Liouville vector. Requesting \texttt{"factorized"} when it does not apply raises \texttt{ValueError}.
+
+The factorized evaluation stores the vectors of the side with fewer vectors for the whole grid (at most $N$ vectors of $D_{\mathrm L}=D_{\mathrm H}^2$ complex entries for each distinct chain) and streams the other side in slabs of its first axis. \texttt{memory\_limit\_mb} bounds the Liouville vectors held by the factorized evaluation (the stored side and the streamed vectors of one slab), not the memory of the process: the model, the Krylov bases and the diagnostics come in addition, and a single slab may exceed it. The slab size is reduced until the vectors fit. With one slab the number of solves is that of the unslabbed evaluation; with several slabs the chains of the streamed side are rebuilt for each slab and the number of solves grows (486 instead of 18 in the example of Sec.~\ArtSISecScaling{} of the Supplementary Material of the article). If even one slab does not fit, \texttt{"auto"} falls back to the pointwise evaluation, and \texttt{"factorized"} proceeds with slabs of one index.
+
+The diagnostics of the result report what was done:
+\begin{itemize}
+    \item \texttt{diagnostics["strategy"]}: \texttt{"pointwise"} or \texttt{"factorized"};
+    \item \texttt{"resolvent\_solves"}: resolvents applied to a vector (one GMRES run on the sparse backend; one solve or product with a cached inverse on the dense backend);
+    \item \texttt{"resolvent\_factorizations"}: dense matrices factorized or inverted (dense backend; the factorized evaluation factorizes each shifted matrix once for all its vectors and does not keep the inverse);
+    \item \texttt{"propagations"}: time propagators applied to a vector, cache hits excluded;
+    \item \texttt{"maximum\_resolvent\_residual"}: largest absolute residual of the GMRES solves (sparse backend);
+    \item \texttt{"solver"}: iterations, residuals and a conditioning indicator of the linear solves (Sec.~\ref{sec:solve-accuracy});
+    \item \texttt{"factorization"} (factorized evaluation only): the cut, the axes of each side, the side that is stored, the number of vectors stored, the number of slabs and the number of detection vectors.
+\end{itemize}
+In the pointwise evaluation \texttt{diagnostics["pathways"][name]} holds one record per grid point; in the factorized evaluation it is empty. The counters can be read at any time with \texttt{solver.backend.counters()} and reset with \texttt{reset\_counters()}.
+
+\subsubsection{Coherence-order-resolved-spectrum}
+
+The method
+
+
+\begin{verbatim}
+generate_nq_spectrum(
+    order,
+    protocol,
+    axes,
+    *,
+    fixed_coordinates=None,
+    pathways=None,
+    observables=None,
+    warn_null=True,
+    strategy="auto",
+    memory_limit_mb=1024.0
+)
+\end{verbatim}
+
+generates a spectrum while separating pathways according to their $+NQ$ and $-NQ$ coherence-order contributions. The requested order must correspond to exactly one protocol interval whose declared coherence order has absolute value $N$. For $N>0$, the returned components include
+\begin{equation}
++NQ,\qquad -NQ,\qquad NQ=(+NQ)+(-NQ).
+\end{equation}
+
+For \(N=0\), the total contribution is stored as
+
+\begin{equation}
+0Q.
+\end{equation}
+
+The same coherence-order separation is applied to the observable-component mapping. Individual pathway and observable arrays remain available in the returned result.
+
+\subsubsection{Result containers}
+
+\texttt{PathwayResult} stores a scalar complex \texttt{value}, the corresponding pathway, diagnostics, and observable values. \texttt{SpectrumResult} stores the multidimensional arrays described above and exposes their common \texttt{shape}. Plotting methods return a \texttt{PlotResult} containing the figure, axes, panel names, selected data, and effective configuration. These containers separate numerical results from rendering and make all aggregation steps inspectable.
+
+
+\subsubsection{Jump-channel access}
+
+The method \texttt{jump\_channel\_names()} returns the GKSL channel names supplied by the model. These names are used by instantaneous or integrated jump observables.
+
+\subsubsection{Decay-rate diagnostic}
+
+The rate of each channel is the Lindblad coefficient $\gamma_c$; its relation to measured decay times depends on the normalization of $\hat{L}_c$. The method
+\begin{verbatim}
+rates = solver.decay_rates(modes=False, max_mode_dimension=40)
+\end{verbatim}
+diagonalizes the Hamiltonian and reports, in its eigenbasis $\{\ket{x}\}$, the rates implied by the declared channels, read from the diagonal of the generator in the basis of dyads $\ket{x}\bra{y}$:
+\begin{align}
+    \Gamma_x&=\sum_c\gamma_c\left(\bra{x}\hat{L}_c^\dagger\hat{L}_c\ket{x}-|\bra{x}\hat{L}_c\ket{x}|^2\right),
+    \qquad
+    W_{y\leftarrow x}=\sum_c\gamma_c|\bra{y}\hat{L}_c\ket{x}|^2,\\
+    \gamma_{xy}&=\sum_c\gamma_c\left[\tfrac{1}{2}\bra{x}\hat{L}_c^\dagger\hat{L}_c\ket{x}+\tfrac{1}{2}\bra{y}\hat{L}_c^\dagger\hat{L}_c\ket{y}-\operatorname{Re}\left(\bra{x}\hat{L}_c\ket{x}\bra{y}\hat{L}_c\ket{y}^*\right)\right].
+\end{align}
+The returned \texttt{DecayRates} object holds the energies, the dominant sector of each eigenstate, the population decay rates $\Gamma_x$ (\texttt{population\_decay}), the transfer rates $W_{y\leftarrow x}$ (\texttt{transition\_rates}), and the coherence decay rates and frequencies $\gamma_{xy}$, $\omega_{xy}$ (\texttt{coherence\_decay}, \texttt{coherence\_frequency}). The method \texttt{coherences(between=(sector\_a, sector\_b))} lists the coherences between two manifolds, for example the optical coherences between the ground and one-excitation manifolds. These secular rates are the pole half-widths of frequency-resolved intervals when the generator does not couple different dyads. With \texttt{modes=True}, the exact eigenvalues $\lambda_\nu=-\kappa_\nu-i\Omega_\nu$ of the generator are added for $D\leq$ \texttt{max\_mode\_dimension}. For the open two-level system of the Quick start, \texttt{decay\_rates()} returns $\gamma_1$ for the excited-state population and $\Gamma_2=\gamma_1/2+\gamma_\phi$ for the optical coherence; a $\hat{\sigma}_z$ channel given the rate $\gamma_\phi$ instead of $\gamma_\phi/2$ would appear as $\gamma_1/2+2\gamma_\phi$. If no dissipative channels are present, the returned tuple is empty.
+
+\subsubsection{Direct Hilbert-space resolvent}
+
+The public method \texttt{solve\_hilbert\_resolvent(...)} delegates the shifted Hilbert-space solve to the active backend. It is available only when the backend advertises this capability; otherwise the solver raises a capability error. The dense backend uses a direct solve and the sparse backend uses GMRES with convergence diagnostics.
+
+
+\subsubsection{Memory estimation}
+
+The method \texttt{estimate\_memory()} returns a structural memory estimate for the active backend. The result includes the total Hilbert-space dimension and the memory required for one complex state vector. For the dense Liouville backend, it additionally reports the Liouville-space dimension and the estimated memory for one density vector and one dense Liouville matrix:
+\begin{equation}
+    D_L = D_H^2
+\end{equation}
+where $D_H$ is the total Hilbert-space dimension. For the sparse backend, the estimate is structural rather than an exact prediction of the final allocation.
+
+
+\subsubsection{Numerical backend architecture}
+\label{app:numerical-backends}
+
+The numerical backend is responsible for assembling the effective generator
+and propagating the pathway response in the time or frequency domain.
+The public \texttt{SpectroscopySolver} orchestrates the calculation, while
+the backend determines how the Hilbert- and Liouville-space operations are
+represented numerically.
+
+Let
+
+\begin{equation}
+D_{\mathrm{H}}
+=
+\sum_{s\in\mathcal{S}}d_s
+\end{equation}
+
+denote the total Hilbert-space dimension. The corresponding vectorized
+Liouville space has dimension
+
+\begin{equation}
+D_{\mathrm{L}}
+=
+D_{\mathrm{H}}^2.
+\end{equation}
+
+\subsubsection*{Common generator}
+
+Both released backends use the same effective generator,
+
+\begin{equation}
+\mathcal{L}[\hat{\rho}]
+=
+-i[\hat{H},\hat{\rho}]
++
+\sum_c
+\gamma_c
+\left(
+\hat{L}_c\hat{\rho} \hat{L}_c^\dagger
+-\frac{1}{2}
+\left\{
+\hat{L}_c^\dagger \hat{L}_c,\hat{\rho}
+\right\}
+\right).
+\end{equation}
+
+The Hamiltonian and collapse operators are assembled from the sector-resolved
+blocks supplied by the external \texttt{SectorModel}. Inter-sector blocks are
+allowed. The backend therefore does not assume that the global Hamiltonian is
+block diagonal.
+
+The common internal generator is represented as a matrix-free linear action
+whenever possible:
+
+\begin{equation}
+\operatorname{vec}(\mathcal{L}[\hat{\rho}])
+=
+\mathcal{L}\operatorname{vec}(\hat{\rho}),
+\end{equation}
+
+where the matrix of \(\mathcal{L}\) acting on the vectorized density
+operator carries the same symbol. The released
+backends use the convention
+
+\begin{equation}
+\mathcal{L}=-i[\hat{H},\,\cdot\,]+\sum_c\gamma_c\mathcal{D}_c.
+\end{equation}
+
+The action on a density matrix is evaluated with products of the sector blocks with the whole matrix \(\hat\rho\), not column by column: \(\hat H\hat\rho\) and \(\hat\rho\hat H\) for the Hamiltonian, and five products per channel (\(\hat L_c\hat\rho\), \(\hat\rho\hat L_c^\dagger\), \(\hat L_c\hat\rho\hat L_c^\dagger\), \(\hat L_c^\dagger\hat L_c\hat\rho\) and \(\hat\rho\hat L_c^\dagger\hat L_c\), the first two being reused). One application of \(\mathcal{L}\) therefore costs \(2+5n_c\) block-by-matrix products for \(n_c\) channels.
+
+A frequency-domain interval with frequency \(\omega\) and broadening
+\(\eta\) solves the shifted Liouville equation
+
+\begin{equation}
+\left[
+(\eta-i\omega)\mathbb{1}
+-
+\mathcal{L}
+\right]x
+=
+\operatorname{vec}(\hat{\rho}).
+\end{equation}
+
+The parameter \(\eta\) is a numerical or phenomenological homogeneous
+broadening and is distinct from the detection efficiency used by jump
+observables.
+
+\subsubsection*{DenseLiouvilleBackend}
+
+\texttt{DenseLiouvilleBackend} is the reference backend for small Hilbert
+spaces. During construction, it materializes the global Hamiltonian and the
+complete Liouville generator:
+
+\begin{equation}
+\hat{H}\in\mathbb{C}^{D_{\mathrm{H}}\times D_{\mathrm{H}}},
+\qquad
+\mathcal{L}
+\in
+\mathbb{C}^{D_{\mathrm{L}}\times D_{\mathrm{L}}}.
+\end{equation}
+
+The time-domain propagator is explicitly constructed as
+
+\begin{equation}
+\mathcal{U}(t)
+=
+\exp(\mathcal{L}t),
+\end{equation}
+
+using a dense matrix exponential. A frequency-domain interval uses the
+dense inverse
+
+\begin{equation}
+\mathcal{R}_\eta(\omega)
+=
+\left[
+(\eta-i\omega)\mathbb{1}
+-
+\mathcal{L}
+\right]^{-1}.
+\end{equation}
+
+The dense backend also provides a Hilbert-space resolvent,
+
+\begin{equation}
+R_{\mathrm{H}}(\omega,\eta)
+=
+\left[
+(\omega+i\eta)\mathbb{1}
+-
+\hat{H}
+\right]^{-1},
+\end{equation}
+
+which is solved using a dense linear-system solver. This Hilbert-space resolvent follows the retarded convention; for the Hamiltonian evolution of a ket it is related to the Liouville-space resolvent of the main text by $\mathcal{R}_\eta=i\,R_{\mathrm{H}}$.
+
+Dense propagation is useful for:
+
+\begin{itemize}
+    \item small two-level or few-level systems;
+    \item validating another backend;
+    \item checking pathway and phase conventions;
+    \item comparing against explicitly constructed Liouville matrices.
+\end{itemize}
+
+Its main limitation is memory scaling. A dense Liouville matrix contains
+\(D_{\mathrm{L}}^2=D_{\mathrm{H}}^4\) complex entries. It therefore becomes
+impractical rapidly as the Hilbert-space dimension increases.
+
+The dense backend optionally caches time propagators and resolvents. Cache
+sizes are bounded by the \texttt{max\_cache\_entries} option. The factorized evaluation of a grid (Sec.~\ref{sec:strategies}) solves each shifted system by one factorization for all the vectors that need that frequency, applies the adjoint resolvent as the solution of the conjugate-transposed system, and does not store the inverses: unlike the pointwise evaluation, it does not depend on the cache holding every frequency of the grid.
+
+\subsubsection*{SparseSectorBackend}
+
+\texttt{SparseSectorBackend} avoids constructing a global dense Hamiltonian or
+a dense \(D_{\mathrm{L}}\times D_{\mathrm{L}}\) Liouville matrix. Instead, it
+keeps the sector-resolved operators as linear actions.
+
+For a Hilbert-space vector \(v\), the Hamiltonian action is assembled from the
+sector blocks,
+
+\begin{equation}
+(Hv)_t
+=
+\sum_s \hat{H}_{ts}v_s,
+\end{equation}
+
+where \(\hat{H}_{ts}\) is the block mapping source sector \(s\) to target sector
+\(t\). This allows inter-sector couplings while preserving the block
+structure supplied by the model.
+
+For time propagation, the backend uses Krylov-based actions of the form
+
+\begin{equation}
+v(t)
+=
+\exp(-i\hat{H}t)v(0).
+\end{equation}
+
+For a pure initial state and unitary time-domain pathway, the ket and bra
+branches can be propagated separately. The response is then represented as a
+rank-one dyad rather than as a full \(D_{\mathrm{L}}\)-component density
+vector.
+
+This representation is exact for a unitary evolution of a pure initial state,
+up to the numerical accuracy of the Krylov propagation.
+
+The backend switches to a Liouville-space representation when at least one of
+the following conditions holds:
+
+\begin{itemize}
+    \item the protocol contains a frequency-domain interval;
+    \item the generator is dissipative;
+    \item the initial state is mixed.
+\end{itemize}
+
+In this case, the density response is stored as a vector of size
+\(D_{\mathrm{L}}\), but the Liouville generator is still applied through a
+matrix-free action. Time propagation uses a Krylov exponential action,
+
+\begin{equation}
+\operatorname{vec}(\hat{\rho}(t))
+=
+\exp(\mathcal{L}t)
+\operatorname{vec}(\hat{\rho}(0)),
+\end{equation}
+
+without constructing the matrix of \(\mathcal{L}\) explicitly.
+
+A frequency-domain interval is evaluated by solving
+
+\begin{equation}
+\left[
+(\eta-i\omega)\mathbb{1}
+-
+\mathcal{L}
+\right]x
+=
+\operatorname{vec}(\hat{\rho})
+\end{equation}
+
+with the GMRES iterative solver. The iterations and the residual of every solve are
+recorded (see the paragraph on the accuracy of the solves below). If GMRES does not
+converge within the requested tolerance, the backend raises a convergence error.
+
+The sparse backend also exposes a Hilbert-space resolvent,
+
+\begin{equation}
+\left[
+(\omega+i\eta)\mathbb{1}
+-
+\hat{H}
+\right]x
+=
+v,
+\end{equation}
+
+which is solved iteratively with GMRES.
+
+The sparse backend therefore avoids the largest dense allocation, but it does
+not eliminate the \(D_{\mathrm{H}}^2\) Liouville vector required for
+frequency-domain, mixed-state, or dissipative calculations.
+
+\paragraph{Options of the sparse backend.}
+The options below are passed to \texttt{SpectroscopySolver} together with
+\texttt{backend="sparse\_sector"} and the broadening \texttt{eta}.
+
+\begin{itemize}
+    \item \texttt{krylov\_tolerance} (default \(10^{-10}\)): relative residual
+    required from each GMRES solve;
+    \item \texttt{krylov\_maxiter} (default \texttt{None}): maximum number of
+    GMRES iterations; \texttt{None} leaves the choice to SciPy;
+    \item \texttt{resolvent\_restart} (default \texttt{None}, that is the
+    SciPy default of 20): restart length of GMRES, see below;
+    \item \texttt{preconditioner} (default \texttt{"auto"}): \texttt{"auto"},
+    \texttt{"diagonal"} or \texttt{None}, see below; any other value raises a
+    \texttt{ValueError};
+    \item \texttt{diagonal\_solve} (default \texttt{True}): solve the shifted systems by division when the generator is exactly diagonal, see below;
+    \item \texttt{cache\_propagations} (default \texttt{True}) and
+    \texttt{max\_cache\_entries} (default 32): caching of propagated states and
+    its bound;
+    \item \texttt{record\_solves} (default \texttt{False}, also accepted by the dense backend): keep one record per linear solve in \texttt{diagnostics["solver"]["records"]} (Sec.~\ref{sec:solve-accuracy}).
+\end{itemize}
+
+\paragraph{Accuracy of the solves.}
+\label{sec:solve-accuracy}
+\texttt{result.diagnostics["solver"]} summarizes the shifted solves of a call to \texttt{generate\_spectrum}:
+\begin{itemize}
+    \item \texttt{"method"} (\texttt{"gmres"}, \texttt{"direct"} or \texttt{"diagonal"}) and \texttt{"solves"};
+    \item \texttt{"iterations\_mean"} and \texttt{"iterations\_max"} (GMRES); a division-solved generator reports \texttt{"exact": True} instead, with no iteration and no residual;
+    \item \texttt{"relative\_residual\_max"} and \texttt{"relative\_residual\_mean"}: $\|b-Sx\|/\|b\|$ for the shifted system $Sx=b$, $S=(\eta-i\omega)\mathbb{1}-\mathcal{L}$;
+    \item \texttt{"condition\_estimate"} and \texttt{"forward\_error\_estimate"}, below;
+    \item \texttt{"records"}, one dictionary per solve (\texttt{omega}, \texttt{eta}, \texttt{adjoint}, \texttt{iterations}, \texttt{relative\_residual}), when the backend option \texttt{record\_solves=True} is given.
+\end{itemize}
+The residual is the true one, not the preconditioned one on which GMRES stops, and it is a backward error: $x$ solves $(S+E)x=b$ exactly with $\|E\|\leq\|b-Sx\|/\|x\|$. The relative error of $x$ is at most $\kappa(S)=\|S\|\|S^{-1}\|$ times the relative residual. For a normal generator, such as a closed model in its eigenbasis, the eigenvalues of $S$ are $\eta+\kappa_\nu-i(\omega-\Omega_\nu)$ with $\kappa_\nu\geq0$, so $\|S^{-1}\|\leq1/\eta$, $\|S\|\leq\eta+|\omega|+\|\mathcal{L}\|$ and
+\begin{equation}
+    \kappa(S)\leq\frac{\eta+|\omega|+\|\mathcal{L}\|}{\eta}\simeq\frac{\|\mathcal{L}\|}{\eta},
+\end{equation}
+whatever the dimension. For a dissipative generator the same resolvent has norm at most $1/\eta$ in the trace norm, because $\exp(\mathcal{L}t)$ is a completely positive trace-preserving map and the resolvent is its Laplace transform; in the Hilbert--Schmidt norm of the solver this gives $\|S^{-1}\|\leq\sqrt{D_{\mathrm H}}/\eta$. \texttt{"condition\_estimate"} is the right-hand side of the bound for a normal generator, with $\|\mathcal{L}\|$ obtained by power iteration (\texttt{backend.generator\_norm()}, a lower estimate) and the maximum over the frequency intervals of the protocol; it is \texttt{None} when no interval is in the frequency domain. It is an indicator of the size of the condition number and not a bound for a dissipative generator, where it can be exceeded by up to a factor $\sqrt{D_{\mathrm H}}$. \texttt{"forward\_error\_estimate"} is its product with the largest relative residual and is to be read in the same way. The residual and the agreement with the dense backend are the controls to rely on; in the examples of the article the error of a solve is of the order of its relative residual. The Hilbert-space resolvent returns \texttt{iterations} and \texttt{relative\_residual} in its diagnostics. The dense backend reports the residual of its direct solves in the factorized evaluation; the pointwise evaluation applies cached inverses and reports none.
+
+Reducing the residual is a matter of \texttt{krylov\_tolerance}. Iterative refinement, which solves $S\,\delta=b-Sx$ and updates $x$, was evaluated and is not offered: each step costs as many GMRES iterations as the solve it corrects, so that reaching $5\times10^{-13}$ from $10^{-6}$ takes 36 iterations, summed over four frequencies, on the thermal four-site chain at $\eta=0.03$~meV, whereas a solve with \texttt{krylov\_tolerance=1e-12} takes 28 for an error of $9\times10^{-16}$.
+
+\paragraph{Diagonal preconditioner.}
+With \texttt{preconditioner="diagonal"} (and with the default \texttt{"auto"} when the Hamiltonian is diagonal, see below), each GMRES solve of the Liouville
+resolvent is preconditioned by the inverse of the shifted diagonal of the
+generator,
+
+\begin{equation}
+M_\omega^{-1}
+=
+\operatorname{diag}\!\left[
+(\eta-i\omega)\mathbb{1}-\mathcal{L}
+\right]^{-1},
+\end{equation}
+
+and each solve of the Hilbert-space resolvent by the inverse of the shifted
+diagonal of \(\hat{H}\). The diagonal of \(\mathcal{L}\) is obtained from the
+sector blocks without forming the matrix. The model adapters express the
+operators in the eigenbasis of the Hamiltonian (sector by sector for
+\texttt{ExcitationSectorModel}). The generator of a closed model, one without
+collapse channels, is then diagonal, and the preconditioner is exact: every
+GMRES solve converges in one iteration, for any \(\eta\) and any dimension
+(with the default \texttt{diagonal\_solve=True} such a solve is done by division instead, see below).
+It stays exact when every collapse operator is diagonal in that basis, as for pure dephasing.
+With collapse channels that couple coherences the diagonal is only an
+approximation: the number of iterations decreases but still depends on
+\(\eta\). The preconditioner does not change the result beyond the solver
+tolerance.
+
+The default \texttt{preconditioner="auto"} applies the diagonal preconditioner when every Hamiltonian block is a diagonal block of a single sector (a model in its eigenbasis, which is what the adapters provide, without coupling between sectors), whatever the collapse operators, and none otherwise. Blocks that are arrays or sparse matrices are inspected (off-diagonal entries below $10^{-12}$ of the largest entry count as zero); matrix-free blocks cannot be, and the preconditioner is then left off, as it is for a model given in a basis that does not diagonalize its Hamiltonian. The choice made is stored in \texttt{backend.preconditioner} and reported as \texttt{diagnostics["solver"]["preconditioner"]}. \texttt{None} always gives plain GMRES and \texttt{"diagonal"} forces the preconditioner, which is valid for any model.
+
+The preconditioner is exact when the generator is diagonal, a closed model or diagonal collapse operators; otherwise the collapse operators perturb the diagonal, which keeps the energy differences, and it remains an approximation that is nevertheless far better than none. This was checked against plain GMRES (\texttt{krylov\_tolerance=1e-10}, restart 20, three kinds of start vector including a random one) on the three-site chain with dissipation scaled from $0.1$ to $1000$ and on the six-site XXZ chain of Example~1 ($D_{\mathrm H}=57$, 4~K) with collective decay or local dephasing from $10^{-3}$ to $10$~meV, at two broadenings each (\texttt{bench\_preconditioner\_dissipative.py}). The ratio of the mean number of iterations (preconditioned over plain) lies between $3\times10^{-4}$ and $0.76$ in 28 of the 30 cases, with a plain GMRES that reaches 54\,000 iterations in one solve against 1\,114 preconditioned; the true residuals are comparable and below $10^{-10}$. Only a local dephasing rate of 10~meV, an order of magnitude above the energy scale of the chain and far from any use in Example~1, is slightly unfavorable: $1.20$ and $1.23$ (about 40 iterations against 33).
+
+\paragraph{Exact diagonal solve.}
+When the generator is exactly diagonal in the dyad basis $|x\rangle\langle y|$, which holds when every Hamiltonian block is a diagonal block of one sector (a model in its eigenbasis) and every collapse operator is a diagonal block too (none, or pure dephasing, possibly with complex diagonal entries), \(\mathcal{L}|x\rangle\langle y|=\mathcal{L}_{xy}|x\rangle\langle y|\) with
+\begin{equation}
+\mathcal{L}_{xy}=-i(E_x-E_y)+\sum_c\gamma_c\Big[L_{c,xx}L^{*}_{c,yy}-\tfrac12\big(K_{c,xx}+K_{c,yy}\big)\Big],\qquad K_c=L_c^\dagger L_c ,
+\end{equation}
+and \texttt{diagonal\_solve=True} (the default) solves every shifted system, direct or adjoint, by the element-wise division \(x=b/[(\eta-i\omega)-\mathcal{L}_{xy}]\), and the Hilbert-space resolvent of a diagonal Hamiltonian by \(x=b/[(\omega+i\eta)-E_x]\). This is the sum over states: exact to rounding, one pass over the vector, no iteration, whatever \(\eta\) and the dimension. The real part of \(\mathcal{L}_{xy}\) is not positive, so the denominator does not vanish for \(\eta>0\); for \(\eta=0\) on a pole the solver raises a \texttt{ConvergenceError} instead of dividing by zero. The backend attribute \texttt{generator\_is\_diagonal} says whether the generator qualifies; a collapse operator that moves population (\(|j\rangle\langle i|\)) or couples coherences, or a block that cannot be inspected (matrix-free), makes it false, and GMRES with the preconditioner above runs. \texttt{diagonal\_solve=False} keeps GMRES in every case, which is how the preconditioner is tested; the dense backend always inverts the matrix and serves as the independent reference.
+
+\paragraph{Restart of GMRES.}
+\texttt{resolvent\_restart=None} leaves the restart length to SciPy ($\min(20,n)$). A longer restart reduces the number of iterations but makes each of them dearer and stores $m+1$ Krylov vectors of $D_{\mathrm L}=D_{\mathrm H}^2$ entries ($85$~MB for $m=200$ at $D_{\mathrm H}=163$). No value wins on the problems measured, so the default is kept. Unpreconditioned solves of the thermal spin chain of Example~1 (\texttt{preconditioner=None}) took, per solve, with $m=20, 50, 100, 200$:
+\begin{center}
+\footnotesize
+\begin{tabular}{lrrrr}
+\toprule
+ & $m=20$ & $m=50$ & $m=100$ & $m=200$\\
+\midrule
+$D_{\mathrm H}=57$, $\eta=0.03$~meV: iterations (time) & 673 (0.12~s) & 321 (0.09~s) & 134 (0.06~s) & 102 (0.06~s)\\
+$D_{\mathrm H}=57$, $\eta=0.003$~meV & 5688 (0.99~s) & 3539 (0.98~s) & 1895 (0.87~s) & 128 (0.08~s)\\
+$D_{\mathrm H}=163$, $\eta=0.03$~meV & 1210 (1.4~s) & 1081 (1.7~s) & 939 (2.6~s) & 798 (4.1~s)\\
+\bottomrule
+\end{tabular}
+\end{center}
+so that a long restart is worth ten at the smallest $\eta$ and costs a factor three at the largest dimension. The solves of the two-level system and of the dissipative three-site chain take two or three iterations whatever the restart. Those of Example~2 ($\eta=10~\mu$eV, lines several meV wide) take 956 iterations on average without preconditioner (at most 5\,694, restart 20) and 3.4 with the default preconditioner (at most 6). With the preconditioner, which the default applies to every model of the article, the restart is immaterial.
+
+\begin{verbatim}
+solver = SpectroscopySolver(
+    backend="sparse_sector",
+    eta=0.03,
+    krylov_tolerance=1e-11,
+    preconditioner="diagonal",
+)
+solver.feed_model(model, context=thermal_context)
+\end{verbatim}
+
+For the thermal spin chain of Example~1 (\(D=57\), \(\eta=0.03\)~meV), the mean
+number of GMRES iterations per solve falls from about 1\,100 to 1, and the time
+for a \(3\times3\) subgrid from 1.2~s to 0.011~s; with the default exact diagonal solve there
+is no iteration and the time is 0.007~s. The measurements as a function of
+\(D\) and \(\eta\) are given in Sec.~\ArtSISecScaling{} of the Supplementary Material of the article and in
+\texttt{validation/benchmarks/example1\_benchmark.ipynb}.
+
+
+
+Both released backends are intended to represent the same physical generator.
+The difference is numerical representation and linear-algebra strategy, not a
+different physical model. The dense backend is useful as a reference
+implementation, while the sparse backend is the preferred default for
+sector-resolved calculations.
+
+\subsubsection*{Backend selection}
+
+The solver accepts the following backend names:
+
+\begin{itemize}
+    \item \texttt{"dense"} or \texttt{"dense\_liouville"}:
+    \texttt{DenseLiouvilleBackend};
+    \item \texttt{"sparse"} or \texttt{"sparse\_sector"}:
+    \texttt{SparseSectorBackend};
+    \item \texttt{"auto"}: automatic selection among the released backends.
+\end{itemize}
+
+The default is
+
+\begin{verbatim}
+backend="sparse_sector"
+\end{verbatim}
+
+It is the backend that scales with the Hilbert-space dimension. For the smallest
+models (a Hilbert space of dimension $D_{\mathrm{H}}\leq10$ in the examples of the
+article) the dense backend is faster, and \texttt{backend="auto"} does not make
+that distinction: it takes the first backend, in the order sparse then dense,
+whose capabilities satisfy the model requirements, so that it selects the dense
+backend only when the sparse one cannot satisfy a requirement.
+
+When \texttt{backend="auto"} is selected, the solver compares the model
+requirements with the declared backend capabilities. The requirements include:
+
+\begin{itemize}
+    \item pure or mixed initial-state support;
+    \item unitary or Lindblad generator;
+    \item time- or frequency-domain support;
+    \item exactness requirements;
+    \item matrix-free requirements.
+\end{itemize}
+
+The built-in automatic selection currently considers the released sparse and
+dense backends. A custom backend registered through \texttt{register\_backend}
+can be selected explicitly by name.
+
+
+
+
+
+\subsubsection{Solver Summary}
+
+The method \texttt{summary()} returns a serializable description of the constructed calculation without exposing the underlying external model. The summary includes
+\begin{itemize} 
+    \item the selected backend;
+    \item backend capabilities and support;
+    \item model requirements and capabilities;
+    \item the sector labels and dimensions;
+    \item the total Hilbert-space dimension;
+    \item the stationarity residual of the reference state;
+    \item the active pathway metadata;
+    \item the transition-operator decomposition and its \texttt{transition\_summary()} when they are advertised by the
+    model.
+\end{itemize}
+This method is intended for inspection, reproducibility records, and debugging of backend or pathway configuration. 
+
+\subsection{\texttt{ObservableSpec}: operator, jump, and action detection}
+\label{sec:observables}
+
+\texttt{ObservableSpec} separates the measured quantity from pathway propagation:
+\begin{verbatim}
+ObservableSpec(
+    name,
+    kind="operator",
+    operator=None,
+    channel=None,
+    efficiency=1.0,
+    time_window=None,
+    n_steps=101,
+    fourth_interaction=None,
+    integration="exact",
+)
+\end{verbatim}
+The efficiency must lie in $[0,1]$. Integrated observables require $0\leq t_0\leq t_f$; \texttt{integration} is \texttt{"exact"} (default) or \texttt{"trapezoid"}, and \texttt{n\_steps}, at least two, is used only by the trapezoidal option.
+
+\subsubsection{Named operator observables}
+
+For \texttt{kind="operator"}, \texttt{operator} identifies a named model-side observable $\hat{O}$. If it is omitted, the observable name is used. For the final pathway response $\hat{\rho}_p$,
+\begin{equation}
+    S_{O,p}=c_p\operatorname{Tr}(\hat{O}\hat{\rho}_p),
+\end{equation}
+where $c_p$ is the pathway response prefactor defined in Section~\ref{sec:pathway-conventions}. Multiple named operators may be exposed by either provided model adapter.
+
+\subsubsection{Instantaneous and integrated jump observables}
+
+For \texttt{kind="jump\_rate"}, \texttt{channel} identifies a GKSL channel. The pathway-resolved detected rate is
+\begin{equation}
+    I_{c,p}(t)=c_p\varepsilon_{\mathrm{det}}\gamma_c
+    \operatorname{Tr}\!\left(\hat{L}_c^\dagger \hat{L}_c\hat{\rho}_p(t)\right).
+\end{equation}
+The channel rate $\gamma_c$ remains separate from $\hat{L}_c$. Hence the channel must be one of \texttt{solver.jump\_channel\_names()}. A pathway contribution can be complex because it includes $c_p$, even though the rate of a physical density matrix is real and non-negative.
+
+For \texttt{kind="integrated\_jump"}, the detected rate is integrated over a detection window that starts after the final pathway interval,
+\begin{equation}
+    N_{c,p}=\int_{t_0}^{t_f}I_{c,p}(t)\,dt
+    =c_p\,\langle\!\langle \hat{X}_{c}|\hat{\rho}_p\rangle\!\rangle,
+    \qquad
+    \hat{X}_{c}=\varepsilon_{\mathrm{det}}\gamma_c\int_{t_0}^{t_f}\mathcal{U}^\dagger(t)\big[\hat{L}_c^\dagger\hat{L}_c\big]\,dt.
+\end{equation}
+With the default \texttt{integration="exact"}, the integrated detector $\hat{X}_c$ is computed once per channel and window, without quadrature, as the last column of the exponential of the augmented generator $\big(\begin{smallmatrix}\mathcal{L}^\dagger & \vec{v}\\ 0&0\end{smallmatrix}\big)$ with $\vec{v}=\operatorname{vec}(\gamma_c\hat{L}_c^\dagger\hat{L}_c)$, followed by $\exp(\mathcal{L}^\dagger t_0)$ when $t_0>0$. The dense backend uses a dense exponential; the sparse backend applies the augmented generator matrix-free with \texttt{expm\_multiply}. The result is cached, so that each pathway state and grid point costs one inner product. With \texttt{integration="trapezoid"}, the propagated response is instead sampled at \texttt{n\_steps} uniformly spaced times and integrated with the trapezoidal rule; this legacy option has an error of order $(\Delta t)^2$ and a cost proportional to \texttt{n\_steps} per grid point. The convenience constructor
+\begin{verbatim}
+ObservableSpec.mean_jump(
+    name,
+    channel,
+    *,
+    time_window=(t0, tf),
+    efficiency=1.0,
+    n_steps=101,
+    fourth_interaction=None,
+    integration="exact",
+)
+\end{verbatim}
+creates this specification. \texttt{observable.instantaneous()} returns the corresponding instantaneous jump-rate detector.
+
+\paragraph{Infinite window.} \texttt{time\_window=(t0, numpy.inf)} integrates the count to infinity. The count rate of a state tends to $\mathrm{Tr}(M\hat\rho_{\mathrm{ss}})\,\mathrm{Tr}\hat\rho$ with $M=\varepsilon_{\mathrm{det}}\gamma_c\hat L_c^\dagger\hat L_c$, so the solver integrates the excess over this stationary background, $\hat X_{c,[t_0,\infty)}=\int_{t_0}^{\infty}\big[\mathcal{U}^\dagger(s)-\mathcal{P}^\dagger\big]\vec{v}\,ds$ with $\vec v=\operatorname{vec}(M^\dagger)$ and $\mathcal{P}^\dagger\vec v=\overline{\mathrm{Tr}(M\hat\rho_{\mathrm{ss}})}\operatorname{vec}(\mathbb{1})$. It equals $\exp(t_0\mathcal{L}^\dagger)\vec x$, where $\vec x$ solves $(\mathcal{L}^\dagger-|\mathbb{1}\rangle\!\rangle\langle\!\langle\hat\rho_{\mathrm{ss}}|)\,\vec x=-(\vec v-\mathcal{P}^\dagger\vec v)$: one dense LU (dense backend) or one GMRES solve (sparse backend, as stiff as the relaxation gap of the generator, so \texttt{krylov\_maxiter} may need raising), cached per channel and window. When the stationary state has no jumps (zero temperature, decay to the ground state) the background vanishes and $\langle\!\langle\hat X|\hat\rho\rangle\!\rangle$ is the total count of the state, its quantum yield: $\gamma_r/(\gamma_r+\gamma_{nr})$ for a counted channel $r$ and a non-counted channel $nr$. The window needs a unique stationary state (\texttt{solver.steady\_state()} reports it): a degenerate kernel raises a \texttt{ConvergenceError} on the dense backend, and the sparse solve may fail to converge; \texttt{integration="trapezoid"} with an infinite window raises a \texttt{ValueError}.
+
+\subsubsection{Action detection through a fourth interaction}
+
+The field \texttt{fourth\_interaction} requests one or more additional perturbative interactions after the final pathway interval and before detection. It accepts an \texttt{Interaction}, a pathway label such as \texttt{"Ku"}, a mapping, or a sequence of alternatives. The convenience constructor is
+\begin{verbatim}
+ObservableSpec.action(
+    name,
+    fourth_interaction,
+    *,
+    kind="operator",
+    operator=None,
+    channel=None,
+    efficiency=1.0,
+    time_window=None,
+    n_steps=101,
+    integration="exact",
+)
+\end{verbatim}
+For alternatives $a\in\mathcal{I}_{\mathrm{rd}}$, the solver applies each interaction to the propagated response and sums the branches before the requested detector,
+\begin{equation}
+    S_{O,p}^{(4)}=
+    c_p\sum_{a\in\mathcal{I}_{\mathrm{rd}}}c_{\mathrm{rd},a}
+    \operatorname{Tr}\!\left[\hat{O}\,\mathcal{V}_a(\hat{\rho}_p)\right],
+    \qquad
+    c_{\mathrm{rd},a}=\begin{cases}+i,&\text{ket action},\\-i,&\text{bra action}.
+    \end{cases}
+\end{equation}
+This fourth interaction adds no protocol interval or spectral axis. For an integrated jump observable, every projected branch is contracted with the same integrated detector (or, with the trapezoidal option, propagated across the detection window before integration). Dedicated properties expose the normalized projection and whether action detection is active; \texttt{without\_projection()} returns the underlying detector specification.
+
+\subsubsection{Normalization and aliases}
+
+\texttt{normalize\_observables(...)} accepts a string or specification, a sequence, or a mapping from aliases to specifications. It returns a validated tuple with unique names; a later duplicate replaces the earlier specification without changing its original position. The aliases \emph{observable} and \emph{trace} map to the operator kind. The aliases \emph{mean jump} and \emph{integrated rate} map to the integrated-jump kind. At least one effective observable is required. The solver retains the pathway's default detection and appends requested observables to the structured result mappings.
+
+
+\subsection{\textbf{Pathway conventions}}
+\label{sec:pathway-conventions}
+
+A pathway is an ordered sequence of light--matter interactions acting on the ket or bra branch of the Liouville-space density operator. In QuDPy-FDGF, each interaction is represented by an \texttt{Interaction} object and each complete pathway by a \texttt{FrequencyPathway} object.
+
+
+
+\subsubsection{Interaction fields}
+
+An interaction is defined by
+
+\begin{verbatim}
+Interaction(
+    label,
+    operator="light_matter",
+    pulse_index=None,
+    source_sector=None,
+    target_sector=None,
+)
+\end{verbatim}
+
+The fields have the following meanings:
+
+\begin{itemize}
+    \item \texttt{label} identifies the side and transition direction;
+    \item \texttt{operator} gives the named transition operator;
+    \item \texttt{pulse\_index} identifies the associated pulse;
+    \item \texttt{source\_sector} optionally constrains the source sector;
+    \item \texttt{target\_sector} optionally constrains the target sector.
+\end{itemize}
+
+The side of an interaction is determined by its label:
+
+\begin{equation}
+\texttt{Ku},\texttt{Kd}\ \Rightarrow\ \text{ket},
+\qquad
+\texttt{Bu},\texttt{Bd}\ \Rightarrow\ \text{bra}.
+\end{equation}
+
+The transition direction applied internally is
+
+\begin{equation}
+\texttt{Ku},\texttt{Bu}\ \Rightarrow\ \hat{\mu}_{+},
+\qquad
+\texttt{Kd},\texttt{Bd}\ \Rightarrow\ \hat{\mu}_{-}.
+\end{equation}
+
+The apparent inversion for bra-side interactions results from the fact that right multiplication of a density matrix is implemented by applying the adjoint operator to the stored bra vector. This implementation preserves the coherence-order convention defined in the next subsection while allowing ket and bra branches to be propagated using ordinary Hilbert-space vectors.
+
+
+\subsubsection{Coherence-order history}
+
+For a dyad $\ket{N_{\mathrm{ket}},a}\bra{N_{\mathrm{bra}},b}$, the signed coherence order is
+\begin{equation}
+q=N_{\mathrm{ket}}-N_{\mathrm{bra}},
+\end{equation}
+where the two $N$ values are excitation-manifold indices, not counts of ket- and bra-side interactions. The coherence-order change associated with each interaction is
+
+\begin{equation}
+\Delta q(\texttt{Ku})=+1, \qquad \Delta q(\texttt{Kd})=-1, \qquad \Delta q(\texttt{Bu})=-1, \qquad \Delta q(\texttt{Bd})=+1.
+\end{equation}
+
+For an ordered interaction sequence \((I_1,I_2,\ldots,I_N)\), the coherence order after interaction \(n\) is
+
+\begin{equation}
+q_n=\sum_{m=1}^{n}\Delta q(I_m),\qquad q_0=0.
+\end{equation}
+
+The complete coherence-order history is therefore
+
+\begin{equation}
+(q_1,q_2,\ldots,q_N).
+\end{equation}
+
+This history is automatically generated from the interaction labels when \texttt{coherence\_orders} is omitted. If a coherence-order tuple is provided explicitly, it must exactly match the values implied by the interaction sequence.
+
+The coherence-order history is used by \texttt{generate\_nq\_spectrum} to separate \(+NQ\), \(-NQ\), and total \(NQ\) contributions.
+
+The history is a label of the interaction sequence. It describes the coherence content of the propagated state, and the \(\pm NQ\) separation of \texttt{generate\_nq\_spectrum} is a statement about that content, only when the generator is phase covariant (\([\mathcal{L},\hat N^{\times}]=0\), \([\hat N,\hat\mu_\pm]=\pm\hat\mu_\pm\), Sec.~\ArtSecScope{} of the article); the solver does not test this property.
+
+
+
+
+\subsubsection{FrequencyPathway fields}
+
+A complete pathway is defined by
+
+\begin{verbatim}
+FrequencyPathway(
+    name,
+    interactions,
+    component="custom",
+    amplitude=1.0,
+    prefactor=None,
+    coherence_orders=(),
+    detection="polarization",
+    origin="user",
+)
+\end{verbatim}
+
+The number of interactions in a pathway must match the number of intervals in the associated \texttt{SpectroscopyProtocol}. Each interaction is paired with one propagation interval.
+
+The component name is normalized to lower case. The nonrephasing aliases are internally mapped to the canonical unrephasing component. Other names may be used for custom groupings. The components \texttt{"rephasing"} and \texttt{"unrephasing"} are validated at third order: a pathway whose signature (Sec.~\ref{sec:signatures}) is not $(-,+,+)$, respectively $(+,-,+)$, raises \texttt{ValueError}, because summing pathways of different signatures into one component mixes phase-matching directions. The field \texttt{origin} is \texttt{"user"} for a pathway written by hand, \texttt{"enumerated"} for those returned by \texttt{pathways\_from\_signature} and \texttt{"ufss"} for those of \texttt{translate\_ufss\_diagrams}; it only decides which vanishing pathways are reported (Sec.~\ref{sec:null-pathways}). The property \texttt{signature} and the metadata expose the signature.
+
+
+\subsubsection{Pathway response prefactor}
+
+If an explicit \texttt{prefactor} is provided, it is used directly as the complex multiplier of the pathway response. Otherwise, the solver constructs the response prefactor from the pathway amplitude, the number of interactions, and the number of bra-side interactions.
+
+Let \(N_{\mathrm{int}}\) be the total number of interactions and \(N_{\mathrm{bra}}\) the number of bra-side interactions. The default
+prefactor is
+
+\begin{equation}
+c_p = a_p\, i^{N_{\mathrm{int}}} (-1)^{N_{\mathrm{bra}}},
+\end{equation}
+
+where \(a_p\) is the complex value of \texttt{amplitude}.
+
+More generally,
+
+\begin{equation}
+c_p=
+\begin{cases}
+\texttt{prefactor},& \text{if an explicit prefactor is supplied},\\[4pt]
+\texttt{amplitude}\, i^{N_{\mathrm{int}}} (-1)^{N_{\mathrm{bra}}},& \text{otherwise}.
+\end{cases}
+\end{equation}
+
+
+The final pathway response and all associated observables are multiplied by
+\(c_p\). Therefore, experimental field phases or alternative diagrammatic
+sign conventions should be encoded through \texttt{amplitude} or an explicit
+\texttt{prefactor}.
+
+\subsubsection{Signatures and completeness}
+\label{sec:signatures}
+
+The pulse $j$ of a pathway radiates with the wave-vector sign $s_j=\Delta q_j$ ($+1$ for \texttt{Ku} and \texttt{Bd}, $-1$ for \texttt{Kd} and \texttt{Bu}), so that the signal is emitted in the direction $\sum_js_j\boldsymbol{k}_j$. The tuple $(s_1,\ldots,s_n)$ is the signature of the pathway, returned by \texttt{pathway\_signature(interactions)} and by the property \texttt{FrequencyPathway.signature}; \texttt{Interaction.sign} gives $s_j$. Rephasing is $(-,+,+)$, non-rephasing $(+,-,+)$ and the fifth-order double-quantum signal of Example~2 $(-,-,+,+,+)$.
+
+The signal of a signature is the sum over \emph{all} pathways with that signature, and a set written by hand can miss some. A sequence that vanishes for a ground-state model without relaxation can be non-zero with relaxation or with a thermal reference state: for the open two-level system, $(B_u,K_u,K_u)$ is non-zero because the radiative channel moves population to $\ket{g}$ during $t_2$, and it refills the ground-state bleach. The function
+\begin{verbatim}
+pathways_from_signature(
+    signature,
+    *,
+    component="custom",
+    detection="polarization",
+    operator="light_matter",
+    max_manifold=None,
+    min_manifold=None,
+)
+\end{verbatim}
+returns the $2^n$ ordered label sequences of a signature, given as a sequence of $\pm1$ or as a string such as \texttt{"-++"}: each pulse with $s_j=+1$ acts as \texttt{Ku} or \texttt{Bd} and each pulse with $s_j=-1$ as \texttt{Kd} or \texttt{Bu}. The pathways are named after their labels (\texttt{"Bu-Ku-Bd"}) and carry \texttt{origin="enumerated"}. The sequences that the model does not allow vanish when the spectrum is computed, so the set is complete by construction. For the two-level system with relaxation, three of the eight rephasing sequences are non-zero, the pathways $R_1$, $R_2$ and $R_3$ of the manuscript; with a thermal state the other sequences, which start with a ket de-excitation, contribute as well.
+
+The arguments \texttt{max\_manifold} and \texttt{min\_manifold} apply the rule 4(a) of the UFSS diagram generator: the ket and bra manifold indices start at $0$ (\texttt{Ku}, \texttt{Bd} change them by $+1$ and $-1$ on the ket and bra respectively, \texttt{Kd} and \texttt{Bu} by the opposite signs) and a sequence is dropped when one leaves $[\texttt{min\_manifold},\texttt{max\_manifold}]$. With a ground-state reference and \texttt{max\_manifold=1} the rephasing set reduces to $R_1$ and $R_2$. The filter is valid only for a ground-state reference state without relaxation between manifolds; with relaxation or thermal populations leave both arguments at \texttt{None}.
+
+\subsubsection{Vanishing pathways}
+\label{sec:null-pathways}
+
+A pathway is null when its response vanishes on the whole grid (\texttt{max}$|S|\leq\texttt{tolerance}\times\max_p\max|S_p|$ with the default tolerance $10^{-14}$, the second maximum running over the pathways of the result). \texttt{SpectrumResult.null\_pathways(tolerance=1e-14)} returns their names and \texttt{result.diagnostics["null\_pathways"]} stores them. A pathway \emph{written by hand} that is null usually reveals a sequence that the transition blocks of the model do not allow or a final coherence order that the detection operator cannot read (a polarization needs $q=\pm1$), so \texttt{generate\_spectrum} emits a \texttt{NullPathwayWarning} for it; \texttt{warn\_null=False} silences the warning. Generated lists (\texttt{"enumerated"}, \texttt{"ufss"}) are not reported, since their zero members are expected, unless every pathway of the result is null.
+
+\subsubsection{UFSS diagram translation}
+
+The helper
+
+\begin{verbatim}
+translate_ufss_diagrams(
+    diagrams,
+    component="custom",
+    names=None,
+    operator="light_matter",
+    amplitudes=None,
+    prefactors=None,
+    detection="polarization",
+)
+\end{verbatim}
+
+translates UFSS-style diagrams into QuDPy-FDGF pathways. Each diagram is represented as an ordered sequence of pairs
+
+\begin{equation}
+(\texttt{label},\texttt{pulse\_index}),
+\end{equation}
+
+for example
+
+\begin{verbatim}
+[
+    ("Ku", 1),
+    ("Bd", 2),
+    ("Ku", 3),
+]
+\end{verbatim}
+
+The helper converts every pair into an \texttt{Interaction}, preserves the
+interaction order, assigns unique pathway names, and constructs the
+corresponding \texttt{FrequencyPathway} objects.
+
+This translation preserves the UFSS coherence-order convention
+
+\begin{equation}
+\Delta q = \{+1,-1,-1,+1\}
+\end{equation}
+
+for the labels
+\(\{\texttt{Ku},\texttt{Kd},\texttt{Bu},\texttt{Bd}\}\), respectively. The translated pathways carry \texttt{origin="ufss"}. The UFSS generator removes the diagrams that leave the manifolds allowed by its \texttt{maximum\_manifold} (its rule 4(a)); when population transfer couples the manifolds, such diagrams can be non-zero, so \texttt{maximum\_manifold} must then be raised (the rephasing set of a two-level system with radiative relaxation needs \texttt{maximum\_manifold = 2}), or \texttt{pathways\_from\_signature} used instead.
+
+
+\subsection{\texttt{SpectroscopyPlotter}}
+\label{sec:plotter}
+
+\texttt{SpectroscopyPlotter} is a rendering-only utility for objects returned by \texttt{SpectroscopySolver}. It selects, phase-rotates, normalizes, and renders already calculated data; it never changes the numerical result. Matplotlib is therefore an optional dependency of the plotting layer only.
+
+\subsubsection{Constructor}
+
+The constructor is
+
+\begin{verbatim}
+SpectroscopyPlotter(
+    w_list=None,
+    detection_phase=0.0,
+)
+\end{verbatim}
+
+The optional \texttt{w\_list} provides a default frequency axis for plotting raw spectra with \texttt{plot\_contourf\_multi\_spectra} or \texttt{plot\_1d}. 
+
+The parameter \texttt{detection\_phase} specifies a display-phase correction. For a complex signal $S$, the plotter applies
+\begin{equation}
+    S_{\phi}=\exp(i\phi_{\mathrm{det}})S
+\end{equation}
+before separating real, imaginary, and absolute views. A plotting configuration may override the constructor value locally.
+
+
+\subsubsection{Selecting data from a \texttt{SpectrumResult}}
+
+The method
+\begin{verbatim}
+select_spectrum_result_data(
+    result,
+    source="pathways",
+    names=None,
+    pathways=None,
+    totals="auto",
+    observable=None,
+)
+\end{verbatim}
+
+selects panels from a two-dimensional result. The source may contain pathways, components, observables, or observable components; a user mapping is also accepted. For observable sources, \texttt{observable} selects the detector. \texttt{names} or the legacy \texttt{pathways} argument restricts the panels, and \texttt{totals} controls component-total panels. The first result axis is plotted vertically and the second horizontally.
+
+
+
+\subsubsection{Dictionary-based plotting configuration}
+
+The principal entry point is
+\begin{verbatim}
+plot_spectrum_result(result, params=None, **overrides)
+\end{verbatim}
+where keyword overrides take precedence over \texttt{params}. Important options include the data \texttt{source}, selected names, \texttt{observable}, view, normalization, detection phase, diagonal guides, quadrant, colormap, contour levels, labels, title, saving, and display. The method returns a \texttt{PlotResult} rather than only a Matplotlib figure.
+
+\subsubsection{Views, normalization, and guides}
+
+The \texttt{view} option accepts \texttt{"real"}, \texttt{"imag"}, \texttt{"abs"}, or \texttt{"all"}. Normalization may be independent per panel, shared per row, global, or disabled through \texttt{"panel"}, \texttt{"row"}, \texttt{"global"}, and \texttt{"none"}; legacy aliases are normalized internally. Real and imaginary panels use symmetric color limits around zero, whereas absolute-value panels use non-negative limits.
+
+Diagonal reference lines may be selected automatically or requested as rephasing, unrephasing, or both. \texttt{plot\_quadrant} accepts the full plane, a zoomed region, or quadrants 1--4. Convenience wrappers cover pathway panels, real/imaginary/absolute views, result contours, and multiple coherence orders. Raw-array utilities remain available for contour and one-dimensional plots.
+
+\section{Versions and compatibility}
+\label{sec:versions}
+
+Releases are numbered \emph{major.minor.patch}, starting from 1.0.0, the version this manual describes. A patch release corrects errors without changing the documented behavior. A minor release adds features and keeps the documented behavior. A change that can alter the signature or the result of an existing call, such as a new required argument, the removal of a default (that of \texttt{eta}, for example) or a different default (the \texttt{"auto"} preconditioner of the sparse backend), is a \emph{breaking change} and is made only in a major release.
+
+The public interface is the set of names exported by \texttt{qudpy\_fdgf} (its \texttt{\_\_all\_\_}) and documented in this manual, with the arguments, defaults, and result fields described here. Names that start with an underscore, the internal organization of the backends, and the keys of the \texttt{diagnostics} dictionaries that this manual does not describe are not part of it and may change in any release.
+
+A name or an argument of the public interface that is to be removed is first deprecated for at least one minor release: it keeps working, emits a \texttt{DeprecationWarning} that names its replacement, and is listed in the changelog.
+
+The file \texttt{CHANGELOG.md} of the code repository records every change, newest first, under the headings \emph{Breaking changes}, \emph{Changed}, and \emph{Added}, and the article and this manual are updated with each entry. Its section \emph{Unreleased} gathers the changes made since the development versions and will be listed under 1.0.0 at the release; the breaking ones (the removal of the default of \texttt{eta}, the \texttt{"auto"} preconditioner of the sparse backend, the removal of the default Boltzmann constant of the thermal models, and the renumbering of the examples) concern code written against those development versions.
+
+\end{document}

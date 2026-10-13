@@ -3,6 +3,8 @@
 **QuDPy-FDGF: A Python-Based Tool for Computing Ultrafast Nonlinear Optical
 Responses Using Frequency-Domain Green's Functions.**
 
+Free software under the GNU General Public License v3 (see [License](#license) and [Citation](#citation)).
+
 The distribution is named `qudpy-fdgf` and the import name is `qudpy_fdgf`.
 Install it in editable mode from the repository root:
 
@@ -19,11 +21,107 @@ physical model definitions and UFSS for the fifth-order pathway example.
 model. An external model supplies its sectors, Hamiltonian blocks,
 transitions, initial state, and observable.
 
-## Dependencies
+## Requirements and tested versions
 
-- NumPy
-- SciPy
-- Matplotlib (optional, for `SpectroscopyPlotter`)
+| Package | Required | Used for | Tested with |
+|---|---|---|---|
+| Python | 3.13 or later | | 3.13.14 |
+| NumPy | 2.5 or later | core | 2.5.0 |
+| SciPy | 1.18 or later | core (Krylov, GMRES) | 1.18.0 |
+| Matplotlib | 3.11 or later | `SpectroscopyPlotter` and figures | 3.11.0 |
+| QuTiP | optional, 5.3 or later | physical operators in the examples | 5.3.0 |
+| UFSS | optional, 0.2.5 or later | automatic pathway generation (Example 2) | 0.2.5 |
+| IPython, ipykernel | optional, 9.15 and 7.3 or later | example notebooks | 9.15.0, 7.3.0 |
+| pytest | optional, 9.1 or later | test suite | 9.1.1 |
+| psutil, nbformat, nbclient | optional, 7.2, 5.11 and 0.11 or later | `validation/` (memory, command-line notebooks) | 7.2.2, 5.11.1, 0.11.0 |
+
+Extras of `pip install -e '.[...]'`: `examples` (QuTiP, UFSS, IPython, ipykernel), `validation`
+(the previous ones plus psutil, nbformat, nbclient), `dev` (pytest). The minimum versions are the tested ones. All tests and notebooks were run on
+Windows 11 with the versions above; other platforms were not tested. BLAS is restricted to one thread (`OMP_NUM_THREADS=1`) for the timings of `validation/`.
+
+## Repository layout
+
+```text
+src/qudpy_fdgf/          the package (generic engine, no physical model)
+    solver.py            SpectroscopySolver: pathways, protocols, spectra, decay_rates()
+    contracts.py         model contract: SectorModel, states, ThermodynamicContext, CollapseChannel
+    model_adapters.py    EigenbasisKModel, ExcitationSectorModel (build a model from arrays or Qobj)
+    pathways.py          Interaction, FrequencyPathway, pathways_from_signature, translate_ufss_diagrams
+    protocols.py         PropagationInterval, SpectroscopyProtocol, standard_nq_protocol
+    observables.py       ObservableSpec: polarization, action detection, jump counts
+    generators.py        matrix-free Liouville generator actions
+    factorized.py        factorized evaluation of a grid (cut of the pathway chain, shared prefixes)
+    backends/            DenseLiouvilleBackend (reference), SparseSectorBackend (matrix-free)
+    diagnostics.py       DecayRates (rates implied by the declared collapse channels)
+    results.py           SpectrumResult, PathwayResult, PlotResult
+    plotting.py          SpectroscopyPlotter
+    capabilities.py, exceptions.py
+examples/                the two-level quickstart notebook and the two examples as notebooks
+    old_scripts/         earlier versions of the examples (not maintained); quickstart.py, the script of the reference test run, stays here
+validation/              models.py, analysis/, benchmarks/, results/ (see validation/README.md)
+tests/                   api/ (contracts and options), physics/ (closed-form results and limits),
+                         regression/ (stored outputs that refactors of the numerical core must reproduce)
+docs/                    API reference manual (PDF and LaTeX source)
+prototypes/              low-rank and tensor-network prototypes (not installed, not tested, not maintained; see its README)
+```
+
+## Reference test run
+
+Install the package with the examples extra, then run from the repository root.
+
+**1. Quick start** (about 2 s). An open two-level system: linear absorption and third-order
+rephasing response, each followed by its analytical value.
+
+```bash
+python examples/old_scripts/quickstart.py
+```
+
+Expected output:
+
+```text
+linear peak      : 2.0000 eV
+FWHM (numerical) : 0.0202 eV
+2(Gamma_2 + eta) : 0.0202 eV
+rephasing peak   : (omega1q, omega3) = (-2.000, 2.000) eV
+|S| at peak      : 1225.37
+2 mu^4/(Gamma_2 + eta)^2 : 1225.37
+```
+
+**2. Quickstart notebook** (about 10 s): run all cells of `examples/quickstart_two_level_model.ipynb`. The
+cell of Section 7 prints
+
+```text
+peak = (-2.000, 2.000) eV
+max|S_pop + i S_pol| / max|S_pol| = 1.3e-16
+N_fl / S_pop = 0.993262; 1 - exp(-5) = 0.993262
+```
+
+The second line is a rounding error, of the order of 1e-16 and platform dependent. The cell saves its results in `validation/results/data/quickstart.npz`.
+
+**3. Test suite** (about 40 s).
+
+```bash
+python -m pytest
+```
+
+Expected: `248 passed` in about 40 s (a local `tests/consistency/` folder, if present, adds 3 tests).
+
+## Examples, tests, and validation
+
+- `examples/old_scripts/quickstart.py`: open two-level system, linear and third-order rephasing responses,
+  with analytical checks (about 2 s). It is the Quick start of the API documentation.
+- `examples/quickstart_two_level_model.ipynb` and `examples/example{1,2}_*.ipynb`: the quickstart and the two examples, as notebooks (see `examples/README.md`).
+- `python -m pytest`: runs `tests/` in about 40 s (`-m "not slow"` skips the slowest). `tests/api/`
+  checks the contracts and options of the library and runs the reference test run of step 1 above, `tests/physics/` checks closed-form results and
+  limiting cases of the manuscript (quickstart formulas, exact jump integral, decay rates, harmonic
+  cancellation at fifth order, the excitation-number action identity of Example 2). `tests/regression/` compares eight small calculations (two-level
+  system, dissipative and thermal chains, time-domain route, fifth-order bosons) with stored outputs
+  (`data/snapshots.npz`); regenerate them only on purpose with
+  `python tests/regression/generate_snapshots.py`.
+- `validation/`: analysis notebooks (convergence, analytical limits), benchmark notebooks
+  and scripts (time, memory, comparison with the original QuDPy), shared models and results.
+  See `validation/README.md`.
+- `docs/`: the API reference manual.
 
 ## Dependency direction
 
@@ -33,7 +131,7 @@ script/notebook --->  external model + qudpy_fdgf
 qudpy_fdgf --->  no physical model
 ```
 
-The solver must never import a class such as `SpinOrbitalModel`.
+The solver must never import a physical model class.
 
 ## Minimal model contract
 
@@ -78,11 +176,21 @@ class MyModel:
 ```
 
 Each block may be a NumPy array, a SciPy sparse matrix, or a
-`scipy.sparse.linalg.LinearOperator`.
+`scipy.sparse.linalg.LinearOperator`. The solver applies a block to the whole density matrix at
+once: a `LinearOperator` should define `matmat`/`rmatmat` when it can do so faster than a loop over
+columns (the default SciPy implementation is that loop); any object with `shape`, `matvec` and
+`rmatvec` still works.
 
 `initial_state()` remains available as a backward-compatible fallback for a
 pure state. The solver never builds a thermal basis, chooses thermally
 accessible sectors, or invents dissipative rates.
+
+The backends check the operators they receive. At construction, `H x` and `H^dagger x` are
+compared for random vectors and a non-Hermitian Hamiltonian raises `ModelContractError`
+(option `hermiticity_tolerance`, default 1e-10). At the first use of each interaction operator,
+`J_minus` is compared with `J_plus^dagger` and a mismatch emits `ModelConsistencyWarning`
+(option `transition_tolerance`, default 1e-8), because `mu = J_plus + J_minus` is then not
+Hermitian.
 
 ## Initial states and temperature
 
@@ -101,7 +209,8 @@ rho0 = DensityState(
 
 Cross-sector blocks support bright--dark, spinor, and momentum coherences. The
 solver validates dimensions, Hermiticity, trace, and positivity only for this
-physical initial state.
+physical initial state, and `feed_model` checks that the reference state is stationary
+(next paragraphs).
 
 The thermal context is passed to the model:
 
@@ -116,6 +225,56 @@ solver.feed_model(model, context=context)
 
 `equilibrium_state(context)` must return the exact thermal state in the
 truncated basis built by the model.
+
+The adapters `EigenbasisKModel` and `ExcitationSectorModel` build the Gibbs state from the Boltzmann
+constant in the unit of the Hamiltonian, which has no default: pass `energy_unit="eV"`, `"meV"`,
+`"cm-1"` or `"THz"` (the ordinary frequency E/h), or `boltzmann_constant=...` per kelvin in
+that unit, to the model. A temperature above zero without either raises a `ValueError` at
+`feed_model` (a wrong unit would give a wrong thermal state without any warning); zero
+temperature needs neither.
+
+```python
+model = ExcitationSectorModel(hamiltonians, raising_blocks, initial_sector=0, energy_unit="meV")
+solver.feed_model(model, context=ThermodynamicContext(temperature=4.0))
+```
+
+The perturbative response assumes that the reference state does not evolve before the first
+pulse, `L rho_ref = 0`. The Gibbs state of `H` is stationary for a closed model, but with
+collapse channels only if they satisfy detailed balance. At the end of `feed_model` the solver
+computes `r = ||L rho_ref|| / ||rho_ref||` (one generator application):
+
+```python
+solver = SpectroscopySolver(eta=0.002, check_stationarity="warn",   # "warn" (default), "error", "off"
+                            stationarity_tolerance=1e-8)
+solver.feed_model(model, context=context)   # StationarityWarning if r > tolerance
+solver.stationarity_residual()              # r, at any time; also in solver.summary()
+```
+
+`r` has the dimension of a rate and is compared with an absolute tolerance in the unit of the Hamiltonian:
+the same model written in eV, meV or ueV gives residuals that differ by factors of 1000, so set
+`stationarity_tolerance` accordingly.
+
+The check does not construct a stationary state, but the solver can compute it:
+
+```python
+state = solver.steady_state()                         # DensityState: L rho = 0, Tr rho = 1
+solver.feed_model(model, initial_state=state)         # impose it as the reference state ...
+solver.feed_model(model, initial_state="steady")      # ... or in one call
+```
+
+`steady_state()` solves `(L + |r>><<1|) x = r` with a trace-one `r` (dense LU on the dense backend,
+GMRES on the sparse one). It is the stationary state when the kernel of `L` is one-dimensional, whatever
+the reference state of the model or the thermodynamic context. If the kernel is larger (a closed model,
+conserved quantities, a level without relaxation, dark states) the state is not unique and a
+`SteadyStateWarning` says so: the dense backend detects it for free (reciprocal condition number of the
+LU); the sparse backend tests it only with `check_unique=True`, a second solve that is as stiff as the
+generator (limited to 2000 iterations, `unique=None` if inconclusive). A stiff generator can exhaust the
+100 restart cycles of the first solve (`ConvergenceError`: raise `krylov_maxiter` or use the dense backend
+for a small model). The diagnostics are in `state.metadata["steady_state"]`. `initial_state` also
+accepts any `DensityState` or `PureState`; the model is then not asked for its own state. Example: for a
+two-level system with a decay channel that breaks detailed balance, the Gibbs state at 10 K triggers a
+`StationarityWarning` and a linear response 9 % below that of the stationary state; with
+`initial_state="steady"` the check passes.
 
 ## Dynamics convention
 
@@ -134,6 +293,12 @@ direct resolvent
 \[
 \left[(\eta-i\omega)I-\mathcal A\right]^{-1}.
 \]
+
+The broadening \(\eta\) is the homogeneous linewidth that this regularization adds: a line of
+decay rate \(\Gamma\) becomes a Lorentzian of half width \(\Gamma+\eta\). It is in the unit of the
+Hamiltonian and it has no default; `SpectroscopySolver(...)` and the backends raise a `ValueError`
+when `eta` is missing, because a value that is reasonable for a Hamiltonian in eV is meaningless in
+cm\(^{-1}\).
 
 No global \(-i\) factor is included in this resolvent. The pathway's
 perturbative coefficient therefore directly carries the
@@ -154,6 +319,25 @@ CollapseChannel(
 
 The rate must not be included a second time in the operator.
 
+The rate is the Lindblad coefficient, not necessarily a measured rate: a
+diagonal channel \(L=\sum_x l_x|x\rangle\langle x|\) damps the coherence
+\(|x\rangle\langle y|\) at \(\gamma(l_x-l_y)^2/2\). A pure-dephasing rate
+\(\gamma_\phi=1/T_2^*\) therefore requires `rate=gamma_phi/2` with
+\(\sigma_z\), but `rate=2*gamma_phi` with a projector or a number operator.
+`solver.decay_rates()` reports the rates implied by the declared channels in
+the eigenbasis of the Hamiltonian:
+
+```python
+rates = solver.decay_rates()                 # modes=True adds exact Liouvillian eigenvalues
+rates.population_decay                       # Gamma_x of each eigenstate
+rates.coherence_decay[x, y]                  # decay rate of |x><y|
+rates.coherences(between=("0", "1"))         # (x, y, omega_xy, gamma_xy) between two sectors
+```
+
+For the open two-level system of `examples/old_scripts/quickstart.py` it returns
+\(\gamma_1\) for the excited-state population and
+\(\Gamma_2=\gamma_1/2+\gamma_\phi\) for the optical coherence.
+
 ## Multiple observables and integrated fluorescence
 
 A pathway propagation can be reused for multiple detection schemes:
@@ -166,7 +350,6 @@ fluorescence = ObservableSpec.mean_jump(
     channel="radiative",
     time_window=(0.0, 200.0),
     efficiency=0.35,
-    n_steps=401,
 )
 
 result = solver.generate_spectrum(
@@ -223,14 +406,29 @@ An `operator` observable computes `Tr[O rho]` at the end of the pathway. A
 `jump_rate` observable computes the instantaneous rate
 
 \[
-I_j(t)=\eta\,\gamma_j\operatorname{Tr}[L_j^\dagger L_j\rho(t)],
+I_j(t)=\varepsilon\,\gamma_j\operatorname{Tr}[L_j^\dagger L_j\rho(t)],
 \]
 
-and `integrated_jump` computes its integrated mean over the requested window.
-The window starts after the pathway's final state, and therefore after the
-protocol's last interaction and propagation. This is a mean jump count; the
-API does not yet generate quantum trajectories or a counting distribution
-`P(N)`.
+where \(\varepsilon\) is the detection efficiency, and `integrated_jump`
+computes its integrated mean over the requested window. The window starts
+after the pathway's final state, and therefore after the protocol's last
+interaction and propagation. This is a mean jump count; the API does not yet
+generate quantum trajectories or a counting distribution `P(N)`.
+
+By default (`integration="exact"`) the window integral is exact. Because the
+trace is linear in the state, the detector is integrated instead of the
+state,
+
+\[
+N_j=\langle\langle X_j|\rho\rangle\rangle,\qquad
+X_j=\varepsilon\,\gamma_j\int_{t_0}^{t_f}\mathcal U^\dagger(t)[L_j^\dagger L_j]\,dt,
+\]
+
+and \(X_j\) is computed once per channel and window from the exponential of
+an augmented Heisenberg-picture generator (dense `expm` or matrix-free
+`expm_multiply`). Each pathway state and grid point then costs one inner
+product. `integration="trapezoid"` keeps the former quadrature over `n_steps`
+samples of the window.
 
 The `EigenbasisKModel` adapter also accepts multiple named operators through
 `observable_op_arrays={"P_a": ..., "P_b": ..., "P_2X": ...}`. Operators must
@@ -250,10 +448,79 @@ model = EigenbasisKModel(
 ```
 
 Both explicit arrays must be supplied together and may have shape `(d, d)` or
-`(N_k, d, d)`. Without these arguments, the current separation based on the
-sign of `Delta_E` and `rwa_tol` remains unchanged.
+`(N_k, d, d)`. Without these arguments, the interaction operator is split by the sign of the
+Bohr frequency `Delta_E`; elements with `|Delta_E| <= rwa_tol` (static dipoles, degenerate pairs)
+belong to neither part. Two additions make this split visible and controllable:
 
-## Plotter V10
+```python
+model = EigenbasisKModel(H, mu, transition_window=(0.5, 3.0))   # keep 0.5 <= |Delta_E| <= 3.0
+model.transition_summary()   # kept / static / degenerate / outside-window fractions of sum |mu_ij|^2
+```
+
+`transition_window` is the band of Bohr frequencies that the impulsive pulses can drive (in the
+units of `H`); without it, any transition of positive energy, however small, is treated as
+resonant with the field. A `ModelConsistencyWarning` is emitted when elements that couple
+degenerate states (more than 1e-6 of the weight) are excluded by `rwa_tol`. `solver.summary()`
+includes the same report.
+
+## Evaluating a grid: pointwise or factorized
+
+A pathway response is a chain of interaction superoperators, time propagators and resolvents ending
+in a detection vector. When the coordinates of two or more intervals are scanned, `generate_spectrum`
+does not repeat the same solves at every grid point. With `strategy="factorized"` it cuts each
+pathway between two scanned intervals, evaluates the forward part once per point of its own axes
+and the adjoint part (resolvents and propagators applied as adjoints to the detection vector) once
+per point of the others, and contracts them with a matrix product. For two axes of `N` points this
+takes about `2N` shifted solves per observable instead of `2N^2` per pathway. Pathways that begin
+the same way (the three rephasing pathways of a two-level system share their first interaction and
+their first resolvent) share the common part, and the observables share the forward part.
+
+```python
+result = solver.generate_spectrum(protocol, axes, pathways=pathways)            # strategy="auto"
+result.diagnostics["strategy"]            # "factorized"
+result.diagnostics["resolvent_solves"]    # linear solves done (GMRES runs, or dense solves)
+result.diagnostics["propagations"]        # time propagators applied to a vector, cache hits excluded
+result.diagnostics["factorization"]       # cut, axes of each side, vectors stored, number of slabs
+result.diagnostics["solver"]              # iterations and residuals of the linear solves (below)
+
+solver.generate_spectrum(protocol, axes, pathways=pathways, strategy="pointwise")   # one propagation per point
+```
+
+- `"auto"` (default): factorized when at least two axes are scanned, when it needs fewer solves
+  than the pointwise evaluation and when the stored Liouville vectors fit in `memory_limit_mb`
+  (default 1024); otherwise pointwise.
+- `"factorized"`: always, or `ValueError` when it does not apply (fewer than two scanned axes; a
+  closed model with a pure state and time intervals only on `SparseSectorBackend`, which is
+  evaluated as a rank-one dyad and is cheaper that way).
+- `"pointwise"`: the former evaluation, kept for validation. Both strategies give the same numbers
+  up to the accuracy of the linear solves (about `1e-10` of the largest value for the default GMRES
+  tolerance, `1e-15` for the dense backend).
+- Memory: the factorized evaluation keeps the vectors of the smaller side for the whole grid
+  and streams the other side in slabs of its first axis so that the vectors in memory stay below
+  `memory_limit_mb`; the solves are the same, only the memory changes. `generate_nq_spectrum` takes
+  the same two arguments.
+
+### Accuracy of the linear solves
+
+`result.diagnostics["solver"]` summarizes the shifted solves of a call: `solves`,
+`iterations_mean` and `iterations_max` (GMRES), `relative_residual_max` and
+`relative_residual_mean`, `condition_estimate` and `forward_error_estimate`. The relative
+residual is `||b - S x|| / ||b||` for the shifted system `S x = b`, with the *true* residual (GMRES
+with a preconditioner stops on the preconditioned one); it is a backward error. The error of `x`
+is at most the condition number of `S` times it, and for a normal generator (a closed model in its
+eigenbasis) `cond(S) <= (eta + |omega| + ||L||) / eta`: the conditioning is set by `||L|| / eta`,
+whatever the dimension. `condition_estimate` is that quantity (`||L||` by power iteration,
+`backend.generator_norm()`), maximized over the frequency intervals, and `forward_error_estimate`
+its product with `relative_residual_max`; for a dissipative generator the bound holds up to a
+factor `sqrt(D)`. In the examples the actual error is of the order of the residual itself, far
+below this worst case. A tighter `krylov_tolerance` is the way to a smaller residual (iterative
+refinement was tried and does not beat it: see the CHANGELOG).
+`SpectroscopySolver(..., record_solves=True)` keeps one record per solve (`diagnostics["solver"]["records"]`:
+frequency, broadening, forward or adjoint, iterations, relative residual). The dense backend reports the
+residual of its direct solves in the factorized evaluation (`relative_residual_max` is `None` in the
+pointwise one, which applies cached inverses).
+
+## Plotter
 
 The plotter is separate from the computation and accepts a configuration
 dictionary. By convention, `axis_values[0]` is plotted on the vertical axis and
@@ -321,15 +588,15 @@ plotter.plot_real_imag_abs(
 
 For an additional output, use `source="observables"` and supply
 `observable="fluorescence"`. The `plot_pathways_multiorder` method remains
-available as a compact V9-inspired interface.
+available as a compact interface.
 
 ## Setup
 
 ```python
 from qudpy_fdgf import SpectroscopySolver
-from my_spin_orbital_model import SpinOrbitalModel
+from my_model import MyModel
 
-model = SpinOrbitalModel(...)
+model = MyModel(...)
 
 solver = SpectroscopySolver(
     backend="sparse_sector",
@@ -348,11 +615,33 @@ solver.feed_model(model)
 - Krylov time propagation;
 - rank-one ket/bra branches;
 - matrix-free Hilbert-space resolvent solved with GMRES;
-- exact frequency-domain pathways through matrix-free Liouville action;
+- frequency-domain pathways through matrix-free Liouville action;
+- factorized evaluation of grids (adjoint resolvents, propagators and interactions, shared prefixes);
+- diagonal preconditioner for the GMRES solves: `preconditioner="auto"` (default) switches it on when the
+  Hamiltonian blocks are diagonal blocks of single sectors (the eigenbasis the model adapters provide)
+  and off otherwise (site basis, couplings between sectors, matrix-free blocks). It is exact, hence one
+  iteration per solve, for a closed model or diagonal collapse operators (pure dephasing), and those solves
+  are then done by division (next item); with collapse
+  operators that couple coherences it is approximate but still divides the iterations by 1.3 to 3000 in the
+  models measured (up to a 23 % increase at a dephasing rate of 10 meV, far above the 1 meV scale of the
+  chain). `"diagonal"` forces it and `None` gives plain GMRES; the choice is in `backend.preconditioner` and
+  `diagnostics["solver"]["preconditioner"]`;
+- integrated jump counts (fluorescence) over a finite window or, with `time_window=(t0, np.inf)`, over an infinite
+  one: the excess over the stationary count rate (the total count when the stationary state has no jumps, the quantum
+  yield), from one linear solve with the adjoint generator on the complement of the stationary state; it needs a
+  unique stationary state;
+- exact diagonal solve: when the generator is exactly diagonal in the dyad basis (diagonal Hamiltonian blocks
+  and diagonal collapse operators: a closed model in its eigenbasis, pure dephasing), `diagonal_solve=True`
+  (default) solves every shifted system, and the Hilbert resolvent of a diagonal Hamiltonian, by an
+  element-wise division, which is the sum over states: exact to rounding, no iteration.
+  `diagonal_solve=False` keeps GMRES with its preconditioner. `backend.generator_is_diagonal` and
+  `diagnostics["solver"]["method"]` (`"diagonal"` or `"gmres"`) tell which route ran;
+- GMRES restart: `resolvent_restart=None` keeps SciPy's 20; no other value wins on the examples
+  (see the CHANGELOG), and `m` costs `(m + 1) D^2` complex numbers;
 - no explicit Liouville matrix.
 
 The frequency-domain path still uses a density vector of size \(D^2\). It
-serves as an exact reference and sanity check, but it is not the final scalable
+serves as a reference and sanity check, but it is not the final scalable
 approach for large spin-orbital spaces. Such systems will require a low-rank
 algorithm or a more specialized wave-function formulation.
 
@@ -363,18 +652,17 @@ algorithm or a more specialized wave-function formulation.
 - pure or mixed states;
 - unitary or Lindblad dynamics;
 - time- and frequency-domain intervals;
-- useful for validating the sectorized backend.
+- useful for validating the sectorized backend;
+- factorized evaluation of grids: one factorization per scanned frequency for all the vectors
+  (`resolvent_factorizations` in the diagnostics), without storing the inverse.
 
 ### Backends not covered by this release
 
-`LowRankLiouvilleBackend`, the tenpy engines (`TenpyDMRGEngine` and
-`TenpyTDVPEngine`), and the associated many-body orchestration
-(`ManyBodySolver` and `ManyBodyDynamicsSolver`) live in `experimental/`. They
-are neither imported nor exposed by `SpectroscopySolver` in this release. They
-remain available through explicit imports (for example,
-`from qudpy_fdgf.experimental.low_rank_liouville import
-LowRankLiouvilleBackend`) for continued development, but they are not
-maintained or guaranteed to be stable here.
+`LowRankLiouvilleBackend`, the TeNPy engines (`TenpyDMRGEngine` and `TenpyTDVPEngine`), and the associated many-body
+orchestration (`ManyBodySolver` and `ManyBodyDynamicsSolver`) are prototypes kept in `prototypes/`, outside the installed
+package. They are neither imported nor exposed by `SpectroscopySolver`, they are not tested, and they are not maintained
+or guaranteed to be stable. From the repository root, for example,
+`from prototypes.low_rank_liouville import LowRankLiouvilleBackend` (the TeNPy modules need `physics-tenpy`).
 
 ## Pathway conventions
 
@@ -388,9 +676,42 @@ maintained or guaranteed to be stable here.
 An `Interaction` may specify a source sector and a target sector. If they are
 omitted, the backend applies every block declared by the model.
 
+### Signatures and completeness
+
+Pulse `j` radiates with the wave-vector sign `s_j = +1` for `Ku` and `Bd` and `-1` for `Kd` and
+`Bu` (`s_j` equals the coherence change). The signal of a pathway set is the sum over **all**
+pathways with the same signature: rephasing `(-,+,+)`, non-rephasing `(+,-,+)`, double quantum
+`(-,-,+,+,+)`, ... Writing the set by hand is error-prone, because a sequence that vanishes for a
+ground-state model can be non-zero with relaxation or a thermal state (for the open two-level
+system, `(Bu, Ku, Ku)` refills the ground-state bleach). `pathways_from_signature` enumerates the
+`2**n` sequences and lets the vanishing ones cancel:
+
+```python
+from qudpy_fdgf import pathways_from_signature, pathway_signature
+
+pathways = pathways_from_signature("-++", component="rephasing")      # 8 sequences, "Bu-Ku-Bd", ...
+result = solver.generate_spectrum(protocol, axes, fixed_coordinates={"t2": 10.0}, pathways=pathways)
+result.components["rephasing"]       # the complete rephasing signal
+result.null_pathways()               # the sequences that vanish for this model
+pathway_signature(("Bu", "Ku", "Bd"))   # (-1, 1, 1)
+```
+
+`max_manifold` and `min_manifold` apply the rule 4(a) of the UFSS diagram generator (ket and
+bra manifold indices stay in `[min, max]`); use them only for a ground-state reference state
+without relaxation between manifolds. For a generated list the zero members are expected and
+are not reported.
+
+`FrequencyPathway` validates its component: `"rephasing"` and `"nonrephasing"` at third order
+require the signatures `(-,+,+)` and `(+,-,+)` and raise `ValueError` otherwise; other component
+names are free. A pathway written by hand that vanishes on the whole grid triggers a
+`NullPathwayWarning` (`generate_spectrum(..., warn_null=False)` silences it), and
+`PropagationInterval(..., signed=True)` makes a protocol check the sign of the coherence order,
+not only its modulus.
+
 ## Current limitations
 
-- construction of the exact thermal state remains the model's responsibility;
+- construction of the exact thermal state remains the model's responsibility; the solver only
+  checks that the reference state is stationary and warns otherwise;
 - only the GKSL/Lindblad form is supported for non-unitary dynamics;
 - no general Redfield generator, HEOM, or bath memory;
 - the matrix-free frequency-domain resolvent in `SparseSectorBackend` still
@@ -400,3 +721,32 @@ omitted, the backend applies every block declared by the model.
 - this release covers only `DenseLiouvilleBackend` and
   `SparseSectorBackend`; see "Backends not covered by this release" above;
 - construction and physical validation of the basis belong to the model.
+
+## License
+
+QuDPy-FDGF is free software, released under the GNU General Public License, version 3 (SPDX identifier
+`GPL-3.0-only`). The full text is in `LICENSE`.
+
+## Citation
+
+If you use QuDPy-FDGF in published work, please cite the article that describes it and the software release.
+
+- Article: M. Desmarais, S. Paiva-Ortega, F. Brunelle, H. Li, E. R. Bittner and C. Silva-Acuña, *QuDPy-FDGF: A Python-Based Tool for
+  Computing Ultrafast Nonlinear Optical Responses Using Frequency Domain Green's Functions*, Computer Physics
+  Communications (in preparation; the reference is completed at publication).
+- Software: `CITATION.cff` (GitHub's "Cite this repository" reads it). The DOI of the archived release is added at the
+  release.
+
+```bibtex
+@software{desmarais2026qudpyfdgf,
+  author  = {Desmarais, Mathieu and Paiva-Ortega, Sim{\'o}n and Brunelle, F{\'e}lix and Li, Hao and Bittner, Eric R. and Silva-Acu{\~n}a, Carlos},
+  title   = {{QuDPy-FDGF}: a {P}ython-based tool for computing ultrafast nonlinear optical responses using frequency-domain {G}reen's functions},
+  year    = {2026},
+  url     = {https://github.com/SilvaScience/QuDPy-FDGF},
+  version = {1.0.0},
+  note    = {GPLv3; DOI to be added at release}
+}
+```
+
+The pathway conventions are those of QuDPy (S. A. Shah *et al.*, Comput. Phys. Commun. **292** (2023) 108891) and
+UFSS (P. A. Rose and J. J. Krich, J. Chem. Phys. **154** (2021) 034109); please cite them as well when you use them.

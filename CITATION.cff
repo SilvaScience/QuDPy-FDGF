@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use QuDPy-FDGF in published work, please cite it using the metadata below, and the article that describes it (see README.md)."
+type: software
+title: "QuDPy-FDGF: a Python-based tool for computing ultrafast nonlinear optical responses using frequency-domain Green's functions"
+abstract: "Open-source Python framework that evaluates Liouville-space pathways of finite quantum systems with unitary or Markovian GKSL dynamics as chains of time propagators and frequency-domain Green's functions, with polarization, action-detected and photon-count observables."
+authors:
+  - family-names: Desmarais
+    given-names: Mathieu
+    affiliation: "Institut Courtois & Département de physique, Université de Montréal"
+  - family-names: Paiva-Ortega
+    given-names: "Simón"
+    affiliation: "Institut Courtois & Département de physique, Université de Montréal"
+  - family-names: Brunelle
+    given-names: "Félix"
+    affiliation: "Institut Courtois & Département de physique, Université de Montréal"
+  - family-names: Li
+    given-names: Hao
+    affiliation: "Institut Courtois & Département de physique, Université de Montréal"
+  - family-names: Bittner
+    given-names: Eric R.
+    affiliation: "Department of Physics, University of Houston"
+  - family-names: "Silva-Acuña"
+    given-names: Carlos
+    affiliation: "Institut Courtois & Département de physique, Université de Montréal"
+repository-code: "https://github.com/SilvaScience/QuDPy-FDGF"
+license: GPL-3.0-only
+version: "1.0.0"
+keywords:
+  - nonlinear spectroscopy
+  - Liouville pathways
+  - Green's functions
+  - open quantum systems
+  - Lindblad equation
+# To be completed at the release, with the archived copy of the software:
+# date-released: YYYY-MM-DD
+# doi: 10.xxxx/xxxxx

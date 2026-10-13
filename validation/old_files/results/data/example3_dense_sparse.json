@@ -1,0 +1,55 @@
+{
+  "D": 10,
+  "pathways": 7,
+  "grid": [
+    31,
+    31
+  ],
+  "full_grid": [
+    151,
+    151
+  ],
+  "eta": 0.008,
+  "runs": {
+    "dense_pointwise_31x31": {
+      "time_s": 1.467198999991524,
+      "resolvent_solves": 13454,
+      "propagations": 20181
+    },
+    "dense_factorized_31x31": {
+      "time_s": 0.010274499989463948,
+      "resolvent_solves": 124,
+      "propagations": 187
+    },
+    "dense_factorized_151x151": {
+      "time_s": 0.058265599989681505,
+      "resolvent_solves": 604,
+      "propagations": 907
+    },
+    "sparse_sector_pointwise_31x31": {
+      "time_s": 0.607792700000573,
+      "resolvent_solves": 13454,
+      "propagations": 187
+    },
+    "sparse_sector_factorized_31x31": {
+      "time_s": 0.08459080000466201,
+      "resolvent_solves": 124,
+      "propagations": 187
+    },
+    "sparse_sector_factorized_151x151": {
+      "time_s": 0.23911680000310298,
+      "resolvent_solves": 604,
+      "propagations": 907
+    }
+  },
+  "time_dense_s": 0.010274499989463948,
+  "time_sparse_s": 0.08459080000466201,
+  "relative_difference": {
+    "polarization_h": 1.4976882395946146e-15,
+    "polarization_l": 1.812299135197419e-15
+  },
+  "strategy_difference": {
+    "dense": 2.4148036359371543e-16,
+    "sparse_sector": 2.954251501053452e-16
+  }
+}

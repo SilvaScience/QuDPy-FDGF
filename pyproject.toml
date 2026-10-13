@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,21 +7,40 @@ name = "qudpy-fdgf"
 dynamic = ["version"]
 description = "Computing ultrafast nonlinear optical responses using frequency-domain Green's functions"
 readme = "README.md"
-requires-python = ">=3.10"
-license = { file = "LICENSE" }
+requires-python = ">=3.13"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Mathieu Desmarais" },
+    { name = "Simón Paiva-Ortega" },
+    { name = "Félix Brunelle" },
+    { name = "Hao Li" },
+    { name = "Eric R. Bittner" },
+    { name = "Carlos Silva-Acuña" },
+]
+keywords = ["nonlinear spectroscopy", "Liouville pathways", "Green's functions", "open quantum systems", "Lindblad equation"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: Microsoft :: Windows",
+]
 dependencies = [
-    "numpy>=1.24",
-    "scipy>=1.10",
-    "matplotlib>=3.7",
+    "numpy>=2.5",
+    "scipy>=1.18",
+    "matplotlib>=3.11",
 ]
 
 [project.optional-dependencies]
+# The lower bounds are the versions with which the test suite and the notebooks were run (Windows 11).
 # Needed by the example notebooks: QuTiP builds the physical operators,
 # while ufss.DiagramGenerator generates the fifth-order pathways.
-examples = ["ufss", "ipython", "qutip"]
-# Only the qudpy_fdgf.experimental tensor-network modules import tenpy.
-manybody = ["physics-tenpy"]
-dev = ["pytest>=7"]
+examples = ["ufss>=0.2.5", "ipython>=9.15", "ipykernel>=7.3", "qutip>=5.3"]
+# Needed to run the analysis and benchmark notebooks and scripts of validation/
+# (psutil measures memory; nbformat and nbclient execute notebooks from the command line).
+validation = ["ufss>=0.2.5", "ipython>=9.15", "ipykernel>=7.3", "qutip>=5.3", "psutil>=7.2", "nbformat>=5.11", "nbclient>=0.11"]
+dev = ["pytest>=9.1"]
 
 [project.urls]
 Repository = "https://github.com/SilvaScience/QuDPy-FDGF"
@@ -33,6 +52,8 @@ version = { attr = "qudpy_fdgf.__version__" }
 where = ["src"]
 
 [tool.pytest.ini_options]
-# testpaths points into local/, which is git-ignored; move the suite back to
-# tests/ at the repository root to make it part of the published package.
-testpaths = ["local/tests"]
+# tests/api: contracts and options of the library; tests/physics: closed-form and limiting-case
+# checks; tests/consistency: local checks against validation/ (not distributed).
+testpaths = ["tests"]
+pythonpath = ["tests", "validation"]
+markers = ["slow: takes more than a few seconds (deselect with -m 'not slow')"]

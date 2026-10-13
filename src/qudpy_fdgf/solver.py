@@ -10,6 +10,7 @@ remain in the model; numerical details remain in the backend.
 """
 
 from collections.abc import Mapping
+import warnings
 
 import numpy as np
 
@@ -18,7 +19,17 @@ from .backends import (
     SparseSectorBackend,
 )
 from .capabilities import Capabilities, ModelRequirements
-from .exceptions import CapabilityError
+from .contracts import DensityState, PureState
+from .diagnostics import decay_rates
+from .backends.base import require_eta
+from .factorized import evaluate_factorized, pathway_operations, plan_factorization
+from .exceptions import (
+    CapabilityError,
+    NullPathwayWarning,
+    StationarityError,
+    StationarityWarning,
+    SteadyStateWarning,
+)
 from .observables import ObservableSpec, normalize_observables
 from .pathways import FrequencyPathway
 from .protocols import SpectroscopyProtocol
@@ -39,13 +50,23 @@ class SpectroscopySolver:
         self,
         *,
         backend="sparse_sector",
-        eta=0.05,
+        eta=None,
         requirements=None,
         thermodynamic_context=None,
+        check_stationarity="warn",
+        stationarity_tolerance=1e-8,
         **backend_options,
     ):
         self.backend_name = str(backend).lower()
-        self.eta = float(eta)
+        self.eta = require_eta(eta)
+        check_stationarity = str(check_stationarity).lower()
+        if check_stationarity not in ("warn", "error", "off"):
+            raise ValueError(
+                "check_stationarity must be 'warn', 'error', or 'off'; "
+                f"got {check_stationarity!r}."
+            )
+        self.check_stationarity = check_stationarity
+        self.stationarity_tolerance = float(stationarity_tolerance)
         self.backend_options = dict(backend_options)
         self.requirements = (
             None
@@ -139,16 +160,38 @@ class SpectroscopySolver:
             )
         return supported[0]
 
-    def feed_model(self, model, *, context=None):
-        """Sector-based model -> initialized backend and solver."""
+    def feed_model(self, model, *, context=None, initial_state=None):
+        """Sector-based model -> initialized backend and solver.
+
+        ``initial_state`` imposes the reference state of the perturbation expansion instead of the one
+        the model supplies (its ``equilibrium_state(context)`` or ``initial_condition``): a
+        ``DensityState`` or a ``PureState`` (for example the result of ``steady_state()``), or the
+        string ``"steady"``, which takes the stationary state of the generator of the model. The
+        model is not asked for its own state then, and ``context`` keeps its other uses (the model
+        still receives it for its collapse channels).
+        """
         if context is not None:
             self.thermodynamic_context = context
+        if initial_state is not None and not (
+            isinstance(initial_state, (DensityState, PureState))
+            or (isinstance(initial_state, str) and initial_state == "steady")
+        ):
+            raise TypeError(
+                "initial_state must be a DensityState, a PureState or 'steady'; "
+                f"got {initial_state!r}."
+            )
         backend_class = self._resolve_backend_class(model)
         backend = backend_class(
             eta=self.eta,
             **self.backend_options,
         )
-        backend.build(model, context=self.thermodynamic_context)
+        if initial_state is None:
+            backend.build(model, context=self.thermodynamic_context)
+        else:
+            backend.build(model, context=self.thermodynamic_context, initial_state=initial_state)
+            if isinstance(initial_state, str):
+                self._steady_state_info = backend.impose_steady_state()
+                self._warn_about_steady_state(self._steady_state_info, backend)
         actual_requirements = ModelRequirements(
             state_kind=(
                 "pure" if backend._initial_is_pure else "mixed"
@@ -176,7 +219,89 @@ class SpectroscopySolver:
         self.model_requirements = actual_requirements
         self.model = model
         self.backend = backend
+        self._check_reference_state()
         return self
+
+    def steady_state(self, *, check_unique=None):
+        """Loaded model -> ``DensityState`` of the stationary state, ``L rho = 0`` with ``Tr rho = 1``.
+
+        Solves ``(L + |r>><<1|) x = r`` for a trace-one ``r`` (a dense LU on the dense backend, GMRES
+        on the sparse one), which gives the stationary state when the kernel of ``L`` is
+        one-dimensional. The state does not depend on the reference state of the model, nor on the
+        thermodynamic context, only on the generator: pass it to ``feed_model(model,
+        initial_state=state)`` to start the expansion from it. ``state.metadata["steady_state"]``
+        holds the method, the relative residual, the Hermiticity error, the smallest eigenvalue and
+        the evidence about uniqueness (``unique`` is ``None`` when the sparse backend could not
+        verify it, see below). A ``SteadyStateWarning`` is emitted when the kernel is not
+        one-dimensional (a closed model, conserved quantities, a sector without relaxation: the state
+        is then not unique and what is returned means nothing) or when the result is not a density
+        matrix to the tolerance.
+
+        Uniqueness is tested for free by the dense backend (reciprocal condition number of the LU).
+        The sparse backend does not test it by default (``unique`` is ``None``): the test, selected
+        with ``check_unique=True``, solves a second system with a random right-hand side, which excites
+        every slow mode and is as stiff as the relaxation gap; it stops after 2000 iterations and
+        leaves ``unique`` at ``None`` if it has not converged. On a closed model or one with
+        conserved quantities the sparse solve may converge to one element of the family, fail to
+        converge (``ConvergenceError``, after 100 restart cycles unless ``krylov_maxiter`` is set), or,
+        for a small model, be flagged by ``check_unique=True``; use the dense backend to check a
+        small model.
+        """
+        self._require_ready()
+        options = {} if check_unique is None else {"check_unique": check_unique}
+        rho, info = self.backend.steady_state(**options)
+        self._warn_about_steady_state(info, self.backend)
+        return self.backend.density_state(rho, metadata={"steady_state": info})
+
+    def _warn_about_steady_state(self, info, backend):
+        problems = []
+        if info["unique"] is False:
+            problems.append(
+                "the kernel of the generator is not one-dimensional (a closed model, conserved "
+                "quantities, or a sector without relaxation), so its stationary state is not unique "
+                "and the state returned is one element of the family, which has no physical meaning; "
+                "supply the reference state with initial_state"
+            )
+        elif info["relative_residual"] > max(1e-8, 100 * getattr(backend, "krylov_tolerance", 0.0)):
+            problems.append(f"the residual ||L rho|| / ||rho|| = {info['relative_residual']:.2e} is large")
+        if info["minimum_eigenvalue"] < -1e-8 or info["hermiticity_error"] > 1e-8:
+            problems.append(
+                f"the result is not a density matrix (smallest eigenvalue {info['minimum_eigenvalue']:.2e}, "
+                f"Hermiticity error {info['hermiticity_error']:.2e})"
+            )
+        if problems:
+            warnings.warn(
+                "Stationary state of the generator: " + "; ".join(problems) + ".",
+                SteadyStateWarning,
+                stacklevel=3,
+            )
+
+    def stationarity_residual(self):
+        """Loaded model -> ``||L rho_ref|| / ||rho_ref||`` of its reference state.
+
+        The perturbative expansion starts from a state that does not evolve before the first
+        pulse; the residual is 0 for a stationary state.
+        """
+        self._require_ready()
+        return self.backend.stationarity_residual()
+
+    def _check_reference_state(self):
+        if self.check_stationarity == "off":
+            return
+        residual = self.backend.stationarity_residual()
+        if residual <= self.stationarity_tolerance:
+            return
+        message = (
+            "The reference state is not stationary under the generator: "
+            f"||L rho|| / ||rho|| = {residual:.2e} > {self.stationarity_tolerance:.0e}. "
+            "The response assumes L rho_ref = 0. A thermal state is stationary only if the "
+            "collapse channels satisfy detailed balance with the Hamiltonian; otherwise supply "
+            "the stationary state of the generator. Set check_stationarity='off' to silence "
+            "this check."
+        )
+        if self.check_stationarity == "error":
+            raise StationarityError(message)
+        warnings.warn(message, StationarityWarning, stacklevel=3)
 
     def set_pathways(self, pathways):
         """Pathway definitions -> active pathway list."""
@@ -329,10 +454,27 @@ class SpectroscopySolver:
         fixed_coordinates=None,
         pathways=None,
         observables=None,
+        warn_null=True,
+        strategy="auto",
+        memory_limit_mb=1024.0,
     ):
         """Protocol and coordinate grid -> multidimensional responses.
 
-        Additional observables reuse each pathway propagation.
+        ``result.diagnostics["null_pathways"]`` lists the pathways that vanish on the whole grid;
+        with ``warn_null`` a pathway written by hand that does is reported by a
+        ``NullPathwayWarning`` (generated lists are not), and so is a result in which every
+        pathway vanishes.
+
+        ``strategy`` selects how the grid is evaluated. ``"pointwise"`` propagates every pathway
+        at every grid point (additional observables reuse that propagation). ``"factorized"`` cuts
+        each pathway between two scanned intervals and evaluates the two parts once per point of
+        their own axes, which needs about ``N1 + N2`` instead of ``N1 * N2`` solves for two axes
+        of ``N1`` and ``N2`` points, and contracts them with a matrix product; it needs at least
+        two scanned axes and stores up to ``memory_limit_mb`` of Liouville vectors, the grid
+        being processed in slabs beyond that. ``"auto"`` (default) takes the factorized
+        evaluation when it applies, is cheaper and fits in the memory limit.
+        ``result.diagnostics`` reports the strategy and the work done (``resolvent_solves``,
+        ``propagations``).
         """
         self._require_ready()
         if not isinstance(protocol, SpectroscopyProtocol):
@@ -378,8 +520,42 @@ class SpectroscopySolver:
             for spec in observable_specs
         }
         self.backend.clear_caches()
+        chosen, plan = self._choose_strategy(
+            strategy,
+            protocol,
+            normalized_axes,
+            fixed_coordinates,
+            selected,
+            len(observable_specs),
+            memory_limit_mb,
+        )
+        reset = getattr(self.backend, "reset_counters", None)
+        if reset is not None:
+            reset()
+        evaluation = {"strategy": chosen}
 
-        for grid_index in np.ndindex(shape):
+        if chosen == "factorized":
+            computed = evaluate_factorized(
+                self.backend,
+                protocol,
+                axis_names,
+                axis_values,
+                fixed_coordinates,
+                selected,
+                observable_specs,
+                plan,
+                memory_limit_bytes=(
+                    None if memory_limit_mb is None else float(memory_limit_mb) * 2**20
+                ),
+            )
+            pathway_values = computed.pathway_values
+            observable_values = computed.observable_values
+            evaluation["factorization"] = computed.info
+            grid_points = ()
+        else:
+            grid_points = np.ndindex(shape)
+
+        for grid_index in grid_points:
             coordinates = dict(fixed_coordinates)
             coordinates.update(
                 {
@@ -402,6 +578,15 @@ class SpectroscopySolver:
                 if result.diagnostics:
                     diagnostics[pathway.name][grid_index] = result.diagnostics
 
+        counters = getattr(self.backend, "counters", None)
+        if counters is not None:
+            evaluation.update(counters())
+        statistics = getattr(self.backend, "solve_statistics", None)
+        if statistics is not None:
+            evaluation["solver"] = self._solver_diagnostics(
+                statistics(), protocol, normalized_axes, fixed_coordinates
+            )
+
         components = {}
         for pathway in selected:
             if pathway.component not in components:
@@ -423,7 +608,7 @@ class SpectroscopySolver:
                 ][pathway.name]
             observable_components[spec.name] = component_values
 
-        return SpectrumResult(
+        result = SpectrumResult(
             axis_names=axis_names,
             axis_values=axis_values,
             pathways=pathway_values,
@@ -436,10 +621,119 @@ class SpectroscopySolver:
                 "backend": self.backend.name,
                 "pathways": diagnostics,
                 "observables": tuple(spec.name for spec in observable_specs),
+                **evaluation,
             },
             observables=observable_values,
             observable_components=observable_components,
         )
+        null = result.null_pathways()
+        result.diagnostics["null_pathways"] = null
+        if warn_null and null:
+            origin = {pathway.name: pathway.origin for pathway in selected}
+            reported = [name for name in null if origin[name] == "user"]
+            if reported or len(null) == len(selected):
+                names = reported or list(null)
+                shown = ", ".join(repr(name) for name in names[:5])
+                more = f" and {len(names) - 5} more" if len(names) > 5 else ""
+                warnings.warn(
+                    f"Pathway(s) {shown}{more} give an identically zero response on the whole "
+                    "grid. Check that the interaction sequence is allowed by the transition "
+                    "blocks of the model and that its final coherence order can be read by the "
+                    "detection operator (a polarization needs q = +-1). Set warn_null=False "
+                    "when zero pathways are expected.",
+                    NullPathwayWarning,
+                    stacklevel=2,
+                )
+        return result
+
+    def _solver_diagnostics(self, statistics, protocol, axes, fixed_coordinates):
+        """Solve statistics -> diagnostics with the conditioning of the shifted systems.
+
+        ``condition_estimate`` is ``max (eta + |omega| + ||L||) / eta`` over the frequency
+        intervals, with ``||L||`` the spectral norm of the generator (power iteration): the
+        condition number of a shifted system when ``L`` is normal (a closed model in its
+        eigenbasis, or weak dissipation), since ``||[(eta - i omega) - L]^-1|| <= 1/eta``; for a
+        non-normal generator the same inverse is bounded by ``sqrt(D) / eta`` in the
+        Hilbert-Schmidt norm, from the contraction of the GKSL semigroup in the trace norm.
+        ``forward_error_estimate`` is its product with the largest relative residual.
+        """
+        info = dict(statistics)
+        estimate = None
+        if info.get("solves"):
+            norm = None
+            for interval in protocol.intervals:
+                if interval.domain != "frequency":
+                    continue
+                eta = self.backend.eta if interval.eta is None else interval.eta
+                if eta <= 0:
+                    continue
+                values = axes.get(interval.name, fixed_coordinates.get(interval.name))
+                largest = float(np.max(np.abs(np.asarray(values, dtype=float))))
+                if norm is None:
+                    norm = self.backend.generator_norm()
+                candidate = (eta + largest + norm) / eta
+                estimate = candidate if estimate is None else max(estimate, candidate)
+        info["condition_estimate"] = estimate
+        residual = info.get("relative_residual_max")
+        info["forward_error_estimate"] = (
+            None if estimate is None or residual is None else estimate * residual
+        )
+        return info
+
+    def _choose_strategy(
+        self,
+        strategy,
+        protocol,
+        axes,
+        fixed_coordinates,
+        selected,
+        n_observables,
+        memory_limit_mb,
+    ):
+        """Requested strategy -> ("pointwise" | "factorized", plan)."""
+        strategy = str(strategy).lower()
+        if strategy not in {"auto", "pointwise", "factorized"}:
+            raise ValueError(
+                "strategy must be 'auto', 'pointwise' or 'factorized'; "
+                f"got {strategy!r}."
+            )
+        if strategy == "pointwise":
+            return "pointwise", None
+        reason = None
+        plan = None
+        applicable = getattr(self.backend, "factorized_applicable", None)
+        if applicable is None or not applicable(protocol):
+            reason = (
+                f"Backend {self.backend.name!r} has no factorized evaluation for this protocol "
+                "(a closed model with a pure state and time intervals only is evaluated as a "
+                "rank-one dyad, which is cheaper)."
+            )
+        else:
+            operations = pathway_operations(
+                self.backend, selected[0], protocol, set(axes), fixed_coordinates
+            )
+            sizes = {name: len(values) for name, values in axes.items()}
+            plan = plan_factorization(operations, sizes, n_observables)
+            if plan is None:
+                reason = (
+                    "The factorized evaluation needs at least two scanned axes; "
+                    f"got {len(axes)}."
+                )
+        if strategy == "factorized":
+            if plan is None:
+                raise ValueError(reason)
+            return "factorized", plan
+        if plan is None or plan.solves >= plan.pointwise_solves:
+            return "pointwise", None
+        if memory_limit_mb is not None:
+            minimum = (
+                (min(plan.left_points, plan.right_points) + 1)
+                * self.backend.layout.total_dimension ** 2
+                * 16
+            )
+            if minimum > float(memory_limit_mb) * 2**20:
+                return "pointwise", None
+        return "factorized", plan
 
     def generate_nq_spectrum(
         self,
@@ -450,6 +744,9 @@ class SpectroscopySolver:
         fixed_coordinates=None,
         pathways=None,
         observables=None,
+        warn_null=True,
+        strategy="auto",
+        memory_limit_mb=1024.0,
     ):
         """NQ protocol and grid -> separate ``+NQ`` and ``-NQ`` responses."""
         order = abs(int(order))
@@ -484,6 +781,9 @@ class SpectroscopySolver:
             fixed_coordinates=fixed_coordinates,
             pathways=selected,
             observables=observables,
+            warn_null=warn_null,
+            strategy=strategy,
+            memory_limit_mb=memory_limit_mb,
         )
         shape = result.shape
         components = dict(result.components)
@@ -533,6 +833,19 @@ class SpectroscopySolver:
         result.observable_components = observable_components
         return result
 
+    def decay_rates(self, *, modes=False, max_mode_dimension=40):
+        """Loaded model -> population and coherence decay rates of its channels.
+
+        Reports, in the eigenbasis of the Hamiltonian, the secular decay rate
+        of every population and coherence implied by the declared GKSL
+        channels, so that the physical meaning of each Lindblad coefficient
+        can be checked before a spectrum is computed. ``modes=True`` adds the
+        exact eigenvalues of the generator (D <= max_mode_dimension).
+        """
+        self._require_ready()
+        return decay_rates(self.backend, modes=modes,
+                           max_mode_dimension=max_mode_dimension)
+
     def estimate_memory(self):
         """Backend layout -> minimum structural memory estimates."""
         self._require_ready()
@@ -576,6 +889,7 @@ class SpectroscopySolver:
             "sectors": self.backend.layout.sectors,
             "sector_dimensions": dict(self.backend.layout.dimensions),
             "total_dimension": self.backend.layout.total_dimension,
+            "stationarity_residual": self.backend.stationarity_residual(),
             "pathways": self.pathway_summary(),
         }
         decomposition = getattr(self.model, "transition_decomposition", None)
@@ -583,6 +897,9 @@ class SpectroscopySolver:
             decomposition = decomposition()
         if decomposition is not None:
             summary["transition_decomposition"] = str(decomposition)
+        transition_summary = getattr(self.model, "transition_summary", None)
+        if callable(transition_summary):
+            summary["transition_summary"] = transition_summary()
         return summary
 
     def solve_hilbert_resolvent(self, vector, omega, **kwargs):

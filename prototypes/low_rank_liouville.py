@@ -13,10 +13,10 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.sparse.linalg import LinearOperator, expm_multiply, gmres
 
-from ..backends.base import BackendBase
-from ..capabilities import BackendCapabilities, Capabilities
-from ..exceptions import CapabilityError, ConvergenceError
-from ..results import PathwayResult
+from qudpy_fdgf.backends.base import BackendBase
+from qudpy_fdgf.capabilities import BackendCapabilities, Capabilities
+from qudpy_fdgf.exceptions import CapabilityError, ConvergenceError
+from qudpy_fdgf.results import PathwayResult
 
 
 @dataclass(frozen=True)
@@ -195,7 +195,7 @@ class LowRankLiouvilleBackend(BackendBase):
     def __init__(
         self,
         *,
-        eta=0.05,
+        eta=None,
         low_rank_tolerance=1e-10,
         low_rank_absolute_tolerance=0.0,
         max_rank=64,

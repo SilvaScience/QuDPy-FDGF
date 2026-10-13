@@ -27,14 +27,21 @@ from .contracts import (
 from .exceptions import (
     CapabilityError,
     ConvergenceError,
+    ModelConsistencyWarning,
     ModelContractError,
+    NullPathwayWarning,
+    QuDPyFDGFError,
     SectorError,
-    SolverV10Error,
+    StationarityError,
+    StationarityWarning,
+    SteadyStateWarning,
 )
 from .pathways import (
     FrequencyPathway,
     Interaction,
     coherence_orders_from_interactions,
+    pathway_signature,
+    pathways_from_signature,
     translate_ufss_diagrams,
 )
 from .protocols import (
@@ -48,6 +55,7 @@ from .plotting import SpectroscopyPlotter
 from .solver import SpectroscopySolver
 from .model_adapters import EigenbasisKModel, ExcitationSectorModel
 from .generators import EvolutionGenerator
+from .diagnostics import DecayRates, decay_rates
 
 __all__ = [
     "BackendCapabilities",
@@ -55,6 +63,7 @@ __all__ = [
     "CapabilityError",
     "CollapseChannel",
     "ConvergenceError",
+    "DecayRates",
     "DenseDensityBlock",
     "DensityState",
     "EigenbasisKModel",
@@ -66,23 +75,31 @@ __all__ = [
     "Interaction",
     "LowRankDensityBlock",
     "ModelRequirements",
+    "ModelConsistencyWarning",
     "ModelContractError",
+    "NullPathwayWarning",
     "OperatorLike",
     "ObservableSpec",
     "PathwayResult",
     "PlotResult",
     "PropagationInterval",
     "PureState",
+    "QuDPyFDGFError",
     "Sector",
     "SectorError",
     "SectorModel",
-    "SolverV10Error",
     "SpectroscopyProtocol",
     "SpectroscopySolver",
     "SpectroscopyPlotter",
     "SpectrumResult",
+    "StationarityError",
+    "StationarityWarning",
+    "SteadyStateWarning",
     "ThermodynamicContext",
     "coherence_orders_from_interactions",
+    "decay_rates",
+    "pathway_signature",
+    "pathways_from_signature",
     "standard_nq_protocol",
     "translate_ufss_diagrams",
     "normalize_observables",

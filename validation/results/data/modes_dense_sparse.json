@@ -1,0 +1,104 @@
+{
+  "open": {
+    "D": 9,
+    "pathways": 3,
+    "grid": [
+      31,
+      31
+    ],
+    "full_grid": [
+      201,
+      201
+    ],
+    "eta": 1e-05,
+    "runs": {
+      "dense_pointwise_31x31": {
+        "time_s": 0.37527140000020154,
+        "resolvent_solves": 5766,
+        "propagations": 2883
+      },
+      "dense_factorized_31x31": {
+        "time_s": 0.025052200013305992,
+        "resolvent_solves": 62,
+        "propagations": 62
+      },
+      "dense_factorized_201x201": {
+        "time_s": 0.05454379998263903,
+        "resolvent_solves": 402,
+        "propagations": 402
+      },
+      "sparse_sector_pointwise_31x31": {
+        "time_s": 7.0854939999990165,
+        "resolvent_solves": 5766,
+        "propagations": 62
+      },
+      "sparse_sector_factorized_31x31": {
+        "time_s": 0.8231178999994881,
+        "resolvent_solves": 62,
+        "propagations": 62
+      },
+      "sparse_sector_factorized_201x201": {
+        "time_s": 4.112394399999175,
+        "resolvent_solves": 402,
+        "propagations": 402
+      }
+    },
+    "dense_versus_sparse": 1.8712352509615584e-12,
+    "dense_versus_sparse_full_grid": 2.2480170550080243e-12,
+    "strategy": {
+      "dense": 2.60696191238202e-16,
+      "sparse_sector": 5.63791681838556e-12
+    }
+  },
+  "closed": {
+    "D": 10,
+    "pathways": 7,
+    "grid": [
+      31,
+      31
+    ],
+    "full_grid": [
+      251,
+      301
+    ],
+    "eta": 0.002,
+    "runs": {
+      "dense_pointwise_31x31": {
+        "time_s": 1.554463599983137,
+        "resolvent_solves": 13454,
+        "propagations": 20181
+      },
+      "dense_factorized_31x31": {
+        "time_s": 0.012472600006731227,
+        "resolvent_solves": 62,
+        "propagations": 187
+      },
+      "dense_factorized_251x301": {
+        "time_s": 0.09495050000259653,
+        "resolvent_solves": 552,
+        "propagations": 1507
+      },
+      "sparse_sector_pointwise_31x31": {
+        "time_s": 0.6561123999999836,
+        "resolvent_solves": 13454,
+        "propagations": 187
+      },
+      "sparse_sector_factorized_31x31": {
+        "time_s": 0.09601539999130182,
+        "resolvent_solves": 62,
+        "propagations": 187
+      },
+      "sparse_sector_factorized_251x301": {
+        "time_s": 0.4004919000144582,
+        "resolvent_solves": 552,
+        "propagations": 1507
+      }
+    },
+    "dense_versus_sparse": 4.71315903393589e-16,
+    "dense_versus_sparse_full_grid": 5.498685539591871e-16,
+    "strategy": {
+      "dense": 2.22180447580447e-16,
+      "sparse_sector": 2.3565795169679444e-16
+    }
+  }
+}

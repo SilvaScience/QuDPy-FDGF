@@ -10,6 +10,7 @@ solver or numerical backends.
 from __future__ import annotations
 
 from collections.abc import Mapping
+import warnings
 
 import numpy as np
 
@@ -20,9 +21,17 @@ from .contracts import (
     PureState,
 )
 from .capabilities import ModelRequirements
+from .exceptions import ModelConsistencyWarning
 
 
-_BOLTZMANN_EV_PER_KELVIN = 8.617333262e-5
+# k_B in the unit of the Hamiltonian per kelvin (CODATA 2018). "THz" is the ordinary frequency
+# nu = E / h (k_B / h); an angular frequency in rad/ps would need k_B / hbar = 0.1309 rad/ps/K.
+_BOLTZMANN_CONSTANTS = {
+    "eV": 8.617333262e-5,
+    "meV": 8.617333262e-2,
+    "cm-1": 0.6950348004,
+    "THz": 2.083661912e-2,
+}
 
 
 def _validated_boltzmann_constant(value):
@@ -31,6 +40,39 @@ def _validated_boltzmann_constant(value):
     if not np.isfinite(value) or value <= 0:
         raise ValueError("boltzmann_constant must be positive and finite.")
     return value
+
+
+def _resolve_boltzmann_constant(energy_unit, boltzmann_constant):
+    """``energy_unit`` or ``boltzmann_constant`` -> k_B per kelvin in the Hamiltonian's unit, or None."""
+    if energy_unit is not None and boltzmann_constant is not None:
+        raise ValueError(
+            "Give either energy_unit or boltzmann_constant, not both."
+        )
+    if energy_unit is not None:
+        unit = str(energy_unit)
+        if unit not in _BOLTZMANN_CONSTANTS:
+            raise ValueError(
+                f"Unknown energy_unit {energy_unit!r}; use one of "
+                + ", ".join(repr(name) for name in _BOLTZMANN_CONSTANTS)
+                + " or give boltzmann_constant in the unit of the Hamiltonian per kelvin."
+            )
+        return _BOLTZMANN_CONSTANTS[unit]
+    if boltzmann_constant is not None:
+        return _validated_boltzmann_constant(boltzmann_constant)
+    return None
+
+
+def _thermal_energy(boltzmann_constant, temperature):
+    """k_B and temperature -> k_B T, or an error when the unit of the energies was not declared."""
+    if boltzmann_constant is None:
+        raise ValueError(
+            f"A temperature of {temperature:g} K needs the Boltzmann constant in the unit of "
+            "the Hamiltonian: pass energy_unit='eV', 'meV', 'cm-1' or 'THz' (the unit of the "
+            "energies of H), or boltzmann_constant=... in that unit per kelvin, to the model. "
+            "There is no default, because a wrong unit gives a wrong thermal state without any "
+            "warning."
+        )
+    return boltzmann_constant * temperature
 
 
 def _as_numpy_array(value, name="array"):
@@ -139,8 +181,10 @@ class ExcitationSectorModel:
     adjoint of ``raising_blocks``. The default detection operator is their
     sum. The initial condition is one eigenstate in one sector; if no sector
     is selected explicitly, the adapter chooses the global lowest-energy
-    eigenstate. ``boltzmann_constant`` must use the same energy unit as the
-    Hamiltonian blocks; its default value is in eV/K.
+    eigenstate. A thermal state needs the Boltzmann constant in the unit of the
+    Hamiltonian blocks: ``energy_unit`` (``"eV"``, ``"meV"``, ``"cm-1"`` or ``"THz"``, the
+    ordinary frequency E/h) or ``boltzmann_constant`` (per kelvin, in that unit). Neither has a
+    default; asking for a temperature above zero without one raises ``ValueError``.
     """
 
     def __init__(
@@ -154,10 +198,11 @@ class ExcitationSectorModel:
         c_ops_raw=(),
         initial_sector=None,
         initial_state_index=0,
-        boltzmann_constant=_BOLTZMANN_EV_PER_KELVIN,
+        energy_unit=None,
+        boltzmann_constant=None,
     ):
-        self._boltzmann_constant = _validated_boltzmann_constant(
-            boltzmann_constant
+        self._boltzmann_constant = _resolve_boltzmann_constant(
+            energy_unit, boltzmann_constant
         )
         hamiltonians = _as_sector_hamiltonians(hamiltonian_blocks)
         self._sectors = tuple(hamiltonians)
@@ -340,6 +385,10 @@ class ExcitationSectorModel:
     def transition_decomposition(self):
         return "explicit_sector"
 
+    def transition_summary(self):
+        """The raising blocks are supplied explicitly; nothing is filtered."""
+        return {"decomposition": "explicit_sector"}
+
     def initial_condition(self, context=None):
         vector = np.zeros(
             self.dimension(self._initial_sector), dtype=np.complex128
@@ -380,7 +429,7 @@ class ExcitationSectorModel:
                     / degeneracy
                 )
         else:
-            denominator = self._boltzmann_constant * temperature
+            denominator = _thermal_energy(self._boltzmann_constant, temperature)
             unnormalized = {
                 sector: np.exp(-(energies - minimum) / denominator)
                 for sector, energies in self._energies.items()
@@ -415,8 +464,17 @@ class EigenbasisKModel:
     """Site-basis arrays -> diagonalized, sector-based k model.
 
     Optional arrays override transition splitting and k-point weights.
-    ``boltzmann_constant`` must use the same energy unit as ``H_model``; its
-    default value is in eV/K.
+    A thermal state needs the Boltzmann constant in the unit of ``H_model``: ``energy_unit``
+    (``"eV"``, ``"meV"``, ``"cm-1"`` or ``"THz"``, the ordinary frequency E/h) or
+    ``boltzmann_constant`` (per kelvin, in that unit). Neither has a default; asking for a
+    temperature above zero without one raises ``ValueError``.
+
+    Without ``j_plus_array`` and ``j_minus_array`` the interaction operator is split by the sign
+    of the Bohr frequency ``E_i - E_j``. Elements with ``|E_i - E_j| <= rwa_tol`` (static dipoles
+    and degenerate pairs) belong to neither part. ``transition_window=(w_min, w_max)`` keeps only
+    the elements whose Bohr frequency satisfies ``w_min <= |E_i - E_j| <= w_max``, in the units of
+    the Hamiltonian: the band that the impulsive pulses of the experiment can drive.
+    ``transition_summary()`` reports what was kept and what was excluded.
     """
 
     def __init__(
@@ -430,11 +488,13 @@ class EigenbasisKModel:
         j_plus_array=None,
         j_minus_array=None,
         rwa_tol=1e-6,
+        transition_window=None,
         k_weights=None,
-        boltzmann_constant=_BOLTZMANN_EV_PER_KELVIN,
+        energy_unit=None,
+        boltzmann_constant=None,
     ):
-        self._boltzmann_constant = _validated_boltzmann_constant(
-            boltzmann_constant
+        self._boltzmann_constant = _resolve_boltzmann_constant(
+            energy_unit, boltzmann_constant
         )
         H_stack = _as_k_stack(H_model, "H_model")
         n_k, d, _ = H_stack.shape
@@ -454,6 +514,29 @@ class EigenbasisKModel:
             raise ValueError(
                 "j_plus_array and j_minus_array must be provided together."
             )
+        self._window = None
+        if transition_window is not None:
+            if explicit_plus:
+                raise ValueError(
+                    "transition_window applies to the automatic decomposition "
+                    "only; it cannot be combined with j_plus_array/j_minus_array."
+                )
+            try:
+                low, high = (float(value) for value in transition_window)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "transition_window must be a pair (w_min, w_max)."
+                ) from exc
+            if not 0.0 <= low < high:
+                raise ValueError("transition_window requires 0 <= w_min < w_max.")
+            self._window = (low, high)
+        self._filter_stats = {
+            "total_weight": 0.0,
+            "static_weight": 0.0,
+            "degenerate_weight": 0.0,
+            "outside_window_weight": 0.0,
+            "n_degenerate_states": 0,
+        }
 
         if explicit_plus:
             j_plus_stack = _as_k_stack(
@@ -542,13 +625,10 @@ class EigenbasisKModel:
                 )
             else:
                 interaction_eigen = U.conj().T @ interaction_stack[index] @ U
-                delta_E = evals[:, np.newaxis] - evals[np.newaxis, :]
-                self._J_plus[sector] = np.where(
-                    delta_E > self._rwa_tol, interaction_eigen, 0.0
-                )
-                self._J_minus[sector] = np.where(
-                    delta_E < -self._rwa_tol, interaction_eigen, 0.0
-                )
+                (
+                    self._J_plus[sector],
+                    self._J_minus[sector],
+                ) = self._split_by_bohr_frequency(interaction_eigen, evals)
             self._detection[sector] = U.conj().T @ detection_stack[index] @ U
             for name, stack in self._observable_arrays.items():
                 self._observables[name][sector] = (
@@ -556,6 +636,72 @@ class EigenbasisKModel:
                 )
 
         self._channels = self._build_channels(c_ops_raw, H_stack)
+        if not explicit_plus:
+            self._warn_about_excluded_transitions()
+
+    def _split_by_bohr_frequency(self, interaction_eigen, energies):
+        """Interaction operator in the eigenbasis -> (J_plus, J_minus), with bookkeeping."""
+        delta_E = energies[:, np.newaxis] - energies[np.newaxis, :]
+        magnitude = np.abs(delta_E)
+        allowed = magnitude > self._rwa_tol
+        if self._window is not None:
+            low, high = self._window
+            in_window = (magnitude >= low) & (magnitude <= high)
+        else:
+            in_window = np.ones_like(allowed)
+        keep = allowed & in_window
+
+        # Zero-frequency elements: those of states with a degenerate partner form blocks whose
+        # Frobenius weight does not depend on the basis chosen inside the degenerate subspace;
+        # the diagonal elements of the other states are static dipole moments.
+        weight = np.abs(interaction_eigen) ** 2
+        has_partner = np.count_nonzero(~allowed, axis=1) > 1
+        degenerate = ~allowed & has_partner[:, np.newaxis] & has_partner[np.newaxis, :]
+        static = ~allowed & ~degenerate
+        stats = self._filter_stats
+        stats["total_weight"] += float(weight.sum())
+        stats["static_weight"] += float(weight[static].sum())
+        stats["degenerate_weight"] += float(weight[degenerate].sum())
+        stats["outside_window_weight"] += float(weight[allowed & ~in_window].sum())
+        stats["n_degenerate_states"] += int(np.count_nonzero(has_partner))
+        return (
+            np.where(keep & (delta_E > 0), interaction_eigen, 0.0),
+            np.where(keep & (delta_E < 0), interaction_eigen, 0.0),
+        )
+
+    def _warn_about_excluded_transitions(self):
+        stats = self._filter_stats
+        fraction = stats["degenerate_weight"] / max(stats["total_weight"], np.finfo(float).tiny)
+        if fraction <= 1e-6:
+            return
+        warnings.warn(
+            f"The interaction operator couples states closer than rwa_tol = {self._rwa_tol:g} "
+            f"(degenerate subspaces; {stats['n_degenerate_states']} states, {fraction:.1%} of its "
+            "weight). These elements are excluded from both J_plus and J_minus, so the field does "
+            "not couple them. If it should, supply j_plus_array and j_minus_array explicitly.",
+            ModelConsistencyWarning,
+            stacklevel=3,
+        )
+
+    def transition_summary(self):
+        """What the automatic decomposition kept and excluded (fractions of ``sum |mu_ij|^2``)."""
+        if self._transition_decomposition == "explicit":
+            return {"decomposition": "explicit"}
+        stats = self._filter_stats
+        total = max(stats["total_weight"], np.finfo(float).tiny)
+        excluded = (
+            stats["static_weight"] + stats["degenerate_weight"] + stats["outside_window_weight"]
+        )
+        return {
+            "decomposition": "automatic_energy",
+            "rwa_tol": self._rwa_tol,
+            "transition_window": self._window,
+            "kept_fraction": 1.0 - excluded / total,
+            "static_fraction": stats["static_weight"] / total,
+            "degenerate_fraction": stats["degenerate_weight"] / total,
+            "outside_window_fraction": stats["outside_window_weight"] / total,
+            "n_degenerate_states": stats["n_degenerate_states"],
+        }
 
     def _build_channels(self, c_ops_raw, H_stack):
         channels = []
@@ -644,7 +790,7 @@ class EigenbasisKModel:
             else:
                 shifted = evals - np.min(evals)
                 boltzmann = np.exp(
-                    -shifted / (self._boltzmann_constant * temperature)
+                    -shifted / _thermal_energy(self._boltzmann_constant, temperature)
                 )
                 populations = boltzmann / boltzmann.sum()
             matrix = np.diag(
